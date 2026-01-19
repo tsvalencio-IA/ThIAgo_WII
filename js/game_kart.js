@@ -54,10 +54,13 @@
             const horizon = h * 0.35; // Horizonte estilo Mario Kart
 
             // =================================================================
-            // 1. INPUT E FÍSICA "PESADA" (Nintendo Feel)
+            // 1. INPUT E FÍSICA "PESADA" (NINTENDO WII FEEL TUNED)
             // =================================================================
             let targetAngle = 0;
             
+            // Relação de velocidade (0.0 a 1.0+) usada para ajustar física
+            const speedRatio = d.speed / (h * 0.075);
+
             // Input de Pose (Mãos)
             if(pose) {
                 const kp = pose.keypoints;
@@ -89,45 +92,86 @@
                     const dx = p2.x - p1.x;
                     let rawAngle = Math.atan2(dy, dx);
                     
-                    // Deadzone
-                    if(Math.abs(rawAngle) < 0.05) rawAngle = 0;
+                    // [GAMEPLAY FIX 1] DEADZONE DINÂMICA
+                    // Quanto mais rápido, maior a deadzone para evitar "samba" na pista
+                    // Baixa velocidade: 0.05 | Alta velocidade: 0.12
+                    const currentDeadzone = 0.05 + (0.07 * Math.min(1, speedRatio));
+
+                    if(Math.abs(rawAngle) < currentDeadzone) {
+                        rawAngle = 0; 
+                    } else {
+                        // Subtrai a deadzone para o movimento começar suave do 0 e não "pular"
+                        rawAngle = rawAngle - (Math.sign(rawAngle) * currentDeadzone);
+                    }
                     
-                    // Curva de resposta
-                    targetAngle = Math.sign(rawAngle) * Math.pow(Math.abs(rawAngle), 1.3) * 2.2 * window.System.sens;
+                    // [GAMEPLAY FIX 2] CURVA DE RESPOSTA EXPONENCIAL (VOLANTE PESADO)
+                    // Mudado de pow 1.3 para 1.8. Isso cria um "platô" no centro.
+                    // O centro fica muito preciso, as pontas viram rápido.
+                    targetAngle = Math.sign(rawAngle) * Math.pow(Math.abs(rawAngle), 1.8) * 2.5 * window.System.sens;
                     
-                    // Auto-Gas
+                    // [GAMEPLAY FIX 3] ASSISTÊNCIA DE LINHA RETA (CENTER MAGNET)
+                    // Se o ângulo for pequeno, puxamos ele para zero magneticamente
+                    if(Math.abs(targetAngle) < 0.3) {
+                        targetAngle *= 0.7; 
+                    }
+
+                    // Auto-Gas (Aceleração automática Nintendo Style)
                     if(d.speed < h * 0.075) d.speed += h * 0.0006; 
                 } else { 
                     d.wheel.opacity *= 0.9; // Volante desaparece suavemente se perder tracking
-                    d.speed *= 0.95; 
+                    d.speed *= 0.96; // Freio motor suave
+                    targetAngle = 0; // Auto-center se perder as mãos
                 }
             }
             
-            // FÍSICA DE INÉRCIA (PESO DO CARRO)
-            const speedRatio = d.speed / (h * 0.075);
-            const inertia = 0.08 + (0.12 * (1 - speedRatio)); 
+            // [GAMEPLAY FIX 4] INÉRCIA ORGÂNICA
+            // O volante volta ao centro mais rápido se o carro estiver rápido (efeito giroscópico)
+            // Mas a entrada no input continua suave (peso)
+            const inertia = 0.05 + (0.15 * (1 - Math.min(1, speedRatio))); 
             
             d.steer += (targetAngle - d.steer) * inertia;
             d.steer = Math.max(-1.6, Math.min(1.6, d.steer)); 
 
-            // Atualiza volante DOM (fallback)
+            // Atualiza volante DOM (fallback) - Mantido oculto
             const uiWheel = document.getElementById('visual-wheel');
-            if(uiWheel) uiWheel.style.opacity = '0'; // Esconde o volante antigo da UI pois desenharemos um novo
+            if(uiWheel) uiWheel.style.opacity = '0'; 
 
-            // Física do Carro
+            // --- FÍSICA DO CARRO (THE NINTENDO SAUCE) ---
             d.pos += d.speed;
             d.score += Math.floor(d.speed * 0.2);
-            d.curve = Math.sin(d.pos * 0.002) * 2.2; 
-            const grip = 1.0 - (speedRatio * 0.15); 
-            d.x += (d.steer * grip * 0.07) - (d.curve * (d.speed/h) * 0.85);
             
-            // Colisão Bordas
+            // Curva da pista mais previsível
+            d.curve = Math.sin(d.pos * 0.002) * 2.2; 
+            
+            // Grip diminui muito pouco com velocidade, mantendo controle arcade
+            const grip = 1.0 - (speedRatio * 0.05); 
+            
+            // [GAMEPLAY FIX 5] ASSISTÊNCIA DE CURVA (SMART TRACK)
+            // Se o jogador está virando para o lado certo da curva, a força centrífuga (penalty) diminui.
+            // O jogo "ajuda" a fazer a curva se detectar intenção correta.
+            let centrifugalPenalty = 0.85; // Valor original (difícil)
+            
+            // Se sinais iguais (virando p/ lado da curva), reduz penalidade para 0.5 (fácil)
+            // d.curve e d.steer tem sinais opostos visualmente na projeção, então verificamos se estão "ajudando"
+            // Se curva é POSITIVA (direita na tela), ela joga X para ESQUERDA (negativo). 
+            // Se Steer é POSITIVO (direita), ele joga X para DIREITA (positivo).
+            // Ajudar = Steer compensando a curva.
+            
+            // Lógica Simplificada: Se estou esterçando forte, a pista me empurra menos.
+            const steerAuthority = Math.abs(d.steer);
+            centrifugalPenalty = Math.max(0.4, 0.85 - (steerAuthority * 0.4));
+
+            d.x += (d.steer * grip * 0.085) - (d.curve * (d.speed/h) * centrifugalPenalty);
+            
+            // Colisão Bordas (Paredes Invisíveis Suaves)
             let isOffRoad = false;
-            if(Math.abs(d.x) > 1.3) { 
-                d.speed *= 0.92; isOffRoad = true; d.x = d.x > 0 ? 1.3 : -1.3;
-                if(d.speed > 2) { window.Gfx.shake(Math.random()*4); if(Math.random()<0.3) window.Sfx.play(100,'noise',0.1,0.05); }
+            // Limite aumentado levemente para 1.4 para perdoar mais
+            if(Math.abs(d.x) > 1.4) { 
+                d.speed *= 0.92; isOffRoad = true; d.x = d.x > 0 ? 1.4 : -1.4;
+                if(d.speed > 2) { window.Gfx.shake(Math.random()*3); if(Math.random()<0.3) window.Sfx.play(100,'noise',0.1,0.05); }
             }
 
+            // Efeitos de Chassis
             d.bounce = Math.sin(Date.now() / 30) * (1 + speedRatio * 2);
             if(isOffRoad) d.bounce = (Math.random() - 0.5) * 12;
             d.visualTilt += (d.steer - d.visualTilt) * 0.2;
