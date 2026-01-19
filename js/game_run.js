@@ -1,12 +1,12 @@
 // =============================================================================
-// LÓGICA DO JOGO: OTTO SUPER RUN (TRUE NINTENDO BACK-VIEW - FINAL)
+// LÓGICA DO JOGO: OTTO SUPER RUN (CORREÇÃO TOTAL: VISÃO TRASEIRA & HITBOX)
 // ARQUITETO: THIAGUINHO WII (CODE 177)
 // =============================================================================
 
 (function() {
     // --- CONFIGURAÇÕES VISUAIS & GAMEPLAY ---
     const CONF = {
-        SPEED: 22,               // Velocidade do mundo
+        SPEED: 22,               // Velocidade do mundo (Game Loop Speed)
         HORIZON_Y: 0.38,         // Altura do horizonte (0.0 a 1.0)
         LANE_SPREAD: 0.8,        // Espalhamento das faixas na tela
         FOCAL_LENGTH: 320,       // Distância focal para perspectiva 3D
@@ -187,7 +187,7 @@
             ctx.restore();
 
             // =================================================================
-            // 4. OBJETOS E COLISÃO (CORRIGIDA)
+            // 4. OBJETOS E COLISÃO (CORRIGIDA E PRECISA)
             // =================================================================
             
             // Spawn Obstáculos
@@ -253,7 +253,7 @@
                     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(sx, screenY, size*0.6, size*0.2, 0, 0, Math.PI*2); ctx.fill();
 
                     if(o.type === 'hurdle') {
-                        // Barreira
+                        // Barreira (Estilo Atletismo)
                         const hH = size * 0.6;
                         ctx.lineWidth = 4 * scale; ctx.strokeStyle = '#fff';
                         ctx.beginPath(); ctx.moveTo(sx-size/2, screenY); ctx.lineTo(sx-size/2, screenY-hH); ctx.moveTo(sx+size/2, screenY); ctx.lineTo(sx+size/2, screenY-hH); ctx.stroke();
@@ -265,31 +265,30 @@
                         if(scale > 0.5 && !o.passed) this.drawActionHint(ctx, sx, screenY - hH - 30*scale, "PULO!", scale, '#ffff00');
                     } 
                     else {
-                        // Placa
+                        // Placa (Estilo Bloco ?)
                         const signH = size * 2.5; const signBox = size * 0.8;
                         ctx.fillStyle = '#333'; ctx.fillRect(sx-2*scale, screenY-signH, 4*scale, signH); // Poste
                         const boxY = screenY - signH;
                         ctx.fillStyle = '#f1c40f'; ctx.fillRect(sx-signBox/2, boxY, signBox, signBox); // Box Ouro
                         ctx.strokeStyle = '#c27c0e'; ctx.lineWidth = 3*scale; ctx.strokeRect(sx-signBox/2, boxY, signBox, signBox);
-                        ctx.fillStyle = '#fff'; ctx.font=`bold ${30*scale}px monospace`; ctx.textAlign='center'; ctx.fillText("?", sx, boxY + signBox*0.7); // ?
+                        ctx.fillStyle = '#fff'; ctx.font=`bold ${30*scale}px monospace`; ctx.textAlign='center'; ctx.fillText("?", sx, boxY + signBox*0.7); 
 
                         if(scale > 0.5 && !o.passed) this.drawActionHint(ctx, sx, boxY - 20*scale, "ABAIXE!", scale, '#fff');
                     }
 
                     // --- COLISÃO ULTRA PRECISA (Fix para "morrer mesmo pulando") ---
-                    // Reduzi a janela de Z de 100 para 25. 
-                    // Isso significa que você só bate se estiver EXATAMENTE em cima da linha.
-                    if(o.z < 25 && o.z > -25 && this.state === 'play') {
+                    // Reduzi a janela de Z para 15. Só colide se estiver EXATAMENTE na linha.
+                    if(o.z < 15 && o.z > -15 && this.state === 'play') {
                         if(o.lane === this.lane) {
                             let hit = false;
                             
-                            // Lógica de colisão
+                            // Lógica rigorosa
                             if(o.type === 'hurdle') {
-                                // Se for barreira, tem que estar pulando
+                                // Se for barreira, TEM QUE estar pulando
                                 if(this.action !== 'jump') hit = true;
                             }
                             if(o.type === 'sign') {
-                                // Se for placa, tem que estar agachado
+                                // Se for placa, TEM QUE estar agachado
                                 if(this.action !== 'crouch') hit = true;
                             }
 
@@ -302,7 +301,7 @@
                                 // SUCESSO!
                                 this.sc += 100;
                                 window.Sfx.coin();
-                                o.passed = true; // Marca como passado para não pontuar 2x
+                                o.passed = true;
                                 this.spawnParticles(sx, screenY - size, 10, '#ffff00');
                             }
                         }
@@ -360,13 +359,13 @@
             for(let i=0; i<w; i+= 300) {
                 const bx = (i - offset + 1000) % (w + 200) - 100;
                 ctx.fillRect(bx, blockY, blockSize, blockSize); ctx.strokeRect(bx, blockY, blockSize, blockSize);
-                if(i % 600 === 0) { // Bloco ?
+                if(i % 600 === 0) { 
                     ctx.fillStyle = '#f1c40f'; ctx.fillRect(bx+35, blockY - 40, blockSize, blockSize); ctx.strokeRect(bx+35, blockY - 40, blockSize, blockSize); ctx.fillStyle = '#b85c00';
                 }
             }
         },
 
-        // --- NOVO DESENHO DO PERSONAGEM (COSTAS VERDADEIRAS) ---
+        // --- DESENHO DO PERSONAGEM (COSTAS VERDADEIRAS) ---
         drawBackViewCharacter: function(ctx, x, y, w, h) {
             const s = w * 0.0035; // Escala Chibi
             
@@ -384,9 +383,9 @@
             
             // CORES
             const C_SKIN = '#ffccaa';
-            const C_SHIRT = '#ff0000';
-            const C_OVERALL = '#0000ff';
-            const C_HAIR = '#4a3222'; // Cabelo castanho
+            const C_SHIRT = '#ff0000'; // Vermelho
+            const C_OVERALL = '#0000ff'; // Azul
+            const C_HAIR = '#4a3222'; // Castanho escuro
             const C_BOOT = '#654321';
             const C_BUTTON = '#ffff00';
 
@@ -421,7 +420,7 @@
                 drawBootBack(-25, 15, 0); drawBootBack(25, 15, 0);
             }
 
-            // 3. CORPO (COSTAS - Alças Cruzadas e sem botões frontais)
+            // 3. CORPO (COSTAS - Alças Cruzadas)
             const bodyY = this.action === 'crouch' ? -20 : -40;
             
             // Camisa Vermelha (Base)
@@ -433,12 +432,12 @@
             ctx.fillRect(-20, bodyY, 40, 30);
             ctx.beginPath(); ctx.arc(0, bodyY+30, 21, 0, Math.PI, false); ctx.fill(); 
             
-            // Alças (Suspensórios nas costas)
+            // Alças (Suspensórios nas costas formando um X ou V)
             ctx.fillStyle = C_OVERALL; 
-            ctx.beginPath(); ctx.moveTo(-15, bodyY-15); ctx.lineTo(15, bodyY+15); ctx.lineTo(5, bodyY+15); ctx.lineTo(-25, bodyY-15); ctx.fill(); // /
-            ctx.beginPath(); ctx.moveTo(15, bodyY-15); ctx.lineTo(-15, bodyY+15); ctx.lineTo(-5, bodyY+15); ctx.lineTo(25, bodyY-15); ctx.fill(); // \
+            ctx.beginPath(); ctx.moveTo(-15, bodyY-15); ctx.lineTo(15, bodyY+15); ctx.lineTo(5, bodyY+15); ctx.lineTo(-25, bodyY-15); ctx.fill(); 
+            ctx.beginPath(); ctx.moveTo(15, bodyY-15); ctx.lineTo(-15, bodyY+15); ctx.lineTo(-5, bodyY+15); ctx.lineTo(25, bodyY-15); ctx.fill(); 
             
-            // Botões Dourados (Nas costas? Não, mas nas alças de conexão fica bonito visualmente)
+            // Botões das alças (nas costas fica o ajuste)
             ctx.fillStyle = C_BUTTON;
             ctx.beginPath(); ctx.arc(-18, bodyY-10, 3, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(18, bodyY-10, 3, 0, Math.PI*2); ctx.fill();
@@ -456,37 +455,32 @@
             ctx.beginPath(); ctx.arc(-32 + (armSwing*0.8), armY+25, 10, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(32 - (armSwing*0.8), armY+25, 10, 0, Math.PI*2); ctx.fill();
 
-            // 5. CABEÇA (VISÃO TRASEIRA - Nuca)
+            // 5. CABEÇA (VISÃO TRASEIRA - NUCA)
             const headY = bodyY - 25;
             
-            // Pele (Nuca/Pescoço)
+            // Pele (Base da cabeça)
             ctx.fillStyle = C_SKIN;
             ctx.beginPath(); ctx.arc(0, headY, 26, 0, Math.PI*2); ctx.fill();
             
             // Cabelo (Cobre a nuca na parte inferior)
+            // Aqui garantimos que parece a parte de trás
             ctx.fillStyle = C_HAIR;
-            ctx.beginPath(); ctx.arc(0, headY+2, 25, 0, Math.PI, false); ctx.fill(); // Meia lua baixo
+            ctx.beginPath(); 
+            ctx.arc(0, headY+2, 25, 0, Math.PI, false); // Meia lua inferior
+            ctx.fill();
             
             // Recorte pequeno do pescoço
             ctx.fillStyle = C_SKIN; ctx.beginPath(); ctx.ellipse(0, headY+18, 8, 6, 0, 0, Math.PI*2); ctx.fill();
 
-            // BANDANA (Nó visível atrás)
-            const wind = Math.sin(this.f * 0.8) * 12;
-            // Nó central
-            ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(0, headY+10, 7, 0, Math.PI*2); ctx.fill();
-            // Pontas voando pra frente (profundidade)
-            ctx.strokeStyle = '#cc0000'; ctx.lineWidth = 6; ctx.lineCap = 'round';
-            ctx.beginPath(); 
-            ctx.moveTo(0, headY+10); ctx.quadraticCurveTo(20, headY+8, 25, headY+15+wind); // Dir
-            ctx.moveTo(0, headY+10); ctx.quadraticCurveTo(-20, headY+8, -25, headY+15+wind); // Esq
-            ctx.stroke();
-
-            // 6. BONÉ (Cúpula Vermelha, sem aba frontal visível, ajuste traseiro)
+            // 6. BONÉ (Cúpula Vermelha cobrindo o topo)
             ctx.fillStyle = C_SHIRT; // Vermelho
             ctx.beginPath(); ctx.arc(0, headY-5, 27, Math.PI, 0); ctx.fill(); // Cúpula
+            
             // Detalhe: Ajuste de plástico do boné atrás
             ctx.fillStyle = '#cc0000'; 
             ctx.beginPath(); ctx.rect(-10, headY-5, 20, 4); ctx.fill();
+
+            // *** SEM OLHOS, SEM NARIZ, SEM BIGODE ***
 
             ctx.restore();
 
@@ -506,7 +500,8 @@
         },
 
         drawOval: function(ctx, x, y, w, h) {
-            ctx.beginPath(); ctx.ellipse(x, y, w/2, h/2, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(x, y, w/2, h/2, 0, 0, Math.PI*2); ctx.fill();
         },
 
         drawCalibration: function(ctx, w, h, cx) {
