@@ -360,16 +360,17 @@
             });
 
             // =================================================================
-            // 5. PERSONAGEM (OTTO STYLE MARIO)
+            // 5. PERSONAGEM (ESTILO PLUMBER BOY - NINTENDO VIBE)
             // =================================================================
             
             const charX = cx + this.currentLaneX;
-            let charY = h * 0.82; // Chão
+            let charY = h * 0.85; // Base do chão
 
             // Física Vertical
-            if(this.action === 'jump') charY -= h * 0.18; // Pulo alto
-            if(this.action === 'crouch') charY += h * 0.04;
+            if(this.action === 'jump') charY -= h * 0.20; // Pulo mais alto
+            if(this.action === 'crouch') charY += h * 0.05;
 
+            // Escala corrigida: w * 0.0035 para ficar "chibi" e caber na tela
             this.drawCharacter(ctx, charX, charY, w, h);
 
             // =================================================================
@@ -441,95 +442,144 @@
         },
 
         drawCharacter: function(ctx, x, y, w, h) {
-            const s = w * 0.0055; // Escala
+            // ESCALA REDUZIDA E CORRIGIDA PARA MOBILE
+            // w * 0.0035 cria um boneco "chibi" que não ocupa a tela toda
+            const s = w * 0.0035; 
             
-            // Sombra no Chão (Fixa no Y base, escala dinâmica no pulo)
-            const groundY = h * 0.85;
-            const shadowS = this.action === 'jump' ? s * 0.7 : s;
-            ctx.fillStyle = 'rgba(0,0,0,0.4)';
-            ctx.beginPath(); ctx.ellipse(x, groundY, 40*shadowS, 10*shadowS, 0, 0, Math.PI*2); ctx.fill();
+            // Sombra no Chão (Fixa no Y base do chão para dar referência de altura no pulo)
+            const groundY = h * 0.88;
+            const shadowS = this.action === 'jump' ? s * 0.5 : s; // Sombra diminui no pulo
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath(); ctx.ellipse(x, groundY, 45*shadowS, 12*shadowS, 0, 0, Math.PI*2); ctx.fill();
 
             ctx.save();
             ctx.translate(x, y);
             ctx.scale(s, s);
 
-            // Estilos do Corpo
-            ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 14;
-            ctx.strokeStyle = '#2c3e50'; // Camisa Azul Escura
-
-            const cycle = Math.sin(this.f * 0.4) * 25;
-
-            // --- DESENHO DO CORPO ---
-            ctx.beginPath();
+            // Variáveis de animação
+            const cycle = Math.sin(this.f * 0.4) * 20;
+            const jumpOffset = this.action === 'jump' ? -10 : 0;
             
-            if(this.action === 'jump') {
-                // POSE PULO HEROICO
-                // Perna Dir (Cima)
-                ctx.moveTo(0, -50); ctx.lineTo(30, -20); ctx.lineTo(40, 10);
-                // Perna Esq (Trás)
-                ctx.moveTo(0, -50); ctx.lineTo(-20, -10); ctx.lineTo(-30, 30);
-                // Braço Dir (Soco pra cima)
-                ctx.moveTo(0, -90); ctx.lineTo(20, -150); 
-                // Braço Esq (Baixo)
-                ctx.moveTo(0, -90); ctx.lineTo(-20, -60);
-            } 
-            else if (this.action === 'crouch') {
-                // POSE AGACHADO (BOLINHA)
-                ctx.moveTo(0, -30); ctx.lineTo(0, -70); // Tronco curto
-                // Pernas dobradas
-                ctx.moveTo(0, -30); ctx.lineTo(-30, 0); ctx.lineTo(-40, 20);
-                ctx.moveTo(0, -30); ctx.lineTo(30, 0); ctx.lineTo(40, 20);
-                // Braços fechados
-                ctx.moveTo(0, -70); ctx.lineTo(-20, -40); ctx.lineTo(0, -30);
-                ctx.moveTo(0, -70); ctx.lineTo(20, -40); ctx.lineTo(0, -30);
-                ctx.translate(0, 30); // Baixa a cabeça
-            }
-            else {
-                // POSE CORRENDO
-                ctx.moveTo(0, -40); ctx.lineTo(15, -100); // Tronco inclinado
-                // Pernas
-                ctx.moveTo(0, -40); ctx.lineTo(-20+cycle, 10); ctx.lineTo(-30+cycle, 50);
-                ctx.moveTo(0, -40); ctx.lineTo(20-cycle, 10); ctx.lineTo(30-cycle, 50);
-                // Braços
-                const sy = -90; const sx = 15;
-                ctx.moveTo(sx, sy); ctx.lineTo(sx-30-cycle, sy+40);
-                ctx.moveTo(sx, sy); ctx.lineTo(sx+30+cycle, sy+40);
-            }
-            ctx.stroke();
+            // CORES DO PERSONAGEM (Estilo Plumber)
+            const C_SKIN = '#ffccaa';
+            const C_SHIRT = '#ff0000'; // Vermelho Mario
+            const C_OVERALL = '#0000ff'; // Azul
+            const C_BUTTON = '#ffff00';
+            const C_BOOT = '#654321';
+            const C_GLOVE = '#ffffff';
 
-            // --- CABEÇA ---
-            const headY = (this.action === 'crouch') ? -100 : -130;
-            const headX = (this.action === 'run') ? 20 : 0;
+            // --- 1. PERNAS (Banhadas, curtas e grossas) ---
+            ctx.fillStyle = C_OVERALL;
+            if(this.action === 'run') {
+                // Perna Esq
+                this.drawLimb(ctx, -15, 0, 14, 30, cycle);
+                // Perna Dir
+                this.drawLimb(ctx, 15, 0, 14, 30, -cycle);
+            } else if (this.action === 'jump') {
+                // Pulo (uma dobrada)
+                this.drawLimb(ctx, -15, -10, 14, 25, -20);
+                this.drawLimb(ctx, 15, 5, 14, 35, 10);
+            } else { // Crouch
+                this.drawLimb(ctx, -20, -5, 14, 20, -40);
+                this.drawLimb(ctx, 20, -5, 14, 20, 40);
+            }
 
-            // Rosto
-            ctx.fillStyle = '#ffccaa'; ctx.beginPath(); ctx.arc(headX, headY, 24, 0, Math.PI*2); ctx.fill();
-            
-            // Olhos (Expressão)
-            ctx.fillStyle = '#000';
-            if(this.action === 'jump') {
-                // Olhos abertos empolgado
-                ctx.beginPath(); ctx.arc(headX+8, headY-5, 4, 0, Math.PI*2); ctx.fill();
-            } else if(this.hitTimer > 0) {
-                // Olhos X (Dano)
-                ctx.lineWidth = 2; ctx.beginPath(); 
-                ctx.moveTo(headX+5, headY-8); ctx.lineTo(headX+11, headY-2);
-                ctx.moveTo(headX+11, headY-8); ctx.lineTo(headX+5, headY-2); ctx.stroke();
+            // --- 2. BOTAS ---
+            ctx.fillStyle = C_BOOT;
+            if(this.action === 'run') {
+                this.drawOval(ctx, -15 + (cycle*0.8), 30 - (Math.abs(cycle)*0.2), 16, 12);
+                this.drawOval(ctx, 15 - (cycle*0.8), 30 - (Math.abs(cycle)*0.2), 16, 12);
+            } else if (this.action === 'jump') {
+                this.drawOval(ctx, -18, 15, 16, 12); // Esq cima
+                this.drawOval(ctx, 18, 40, 16, 12);  // Dir baixo
             } else {
-                // Olhos normais focados
-                ctx.fillRect(headX+6, headY-6, 4, 6);
+                this.drawOval(ctx, -25, 15, 16, 12);
+                this.drawOval(ctx, 25, 15, 16, 12);
             }
 
-            // Bandana Vermelha (Física)
-            const wind = Math.sin(this.f * 0.8) * 12;
-            ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 8;
-            ctx.beginPath(); ctx.moveTo(headX-22, headY-10); ctx.lineTo(headX+22, headY-10); ctx.stroke();
+            // --- 3. CORPO (Gordinho) ---
+            const bodyH = this.action === 'crouch' ? 35 : 45;
+            const bodyY = this.action === 'crouch' ? -20 : -40;
             
-            // Cauda da Bandana
-            ctx.lineWidth = 5;
+            // Camisa Vermelha (Base)
+            ctx.fillStyle = C_SHIRT;
+            ctx.beginPath(); ctx.arc(0, bodyY, 28, 0, Math.PI*2); ctx.fill();
+            
+            // Macacão Azul
+            ctx.fillStyle = C_OVERALL;
+            ctx.fillRect(-20, bodyY, 40, 30);
+            ctx.beginPath(); ctx.arc(0, bodyY+30, 21, 0, Math.PI, false); ctx.fill(); // Fundo arredondado
+
+            // Botões Amarelos
+            ctx.fillStyle = C_BUTTON;
+            ctx.beginPath(); ctx.arc(-10, bodyY+5, 4, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(10, bodyY+5, 4, 0, Math.PI*2); ctx.fill();
+
+            // --- 4. BRAÇOS (Curtos) ---
+            ctx.fillStyle = C_SHIRT;
+            const armY = bodyY - 5;
+            if(this.action === 'jump') {
+                // Braço Soco pra Cima
+                ctx.beginPath(); ctx.ellipse(25, armY-20, 10, 20, -0.5, 0, Math.PI*2); ctx.fill(); // Dir
+                ctx.beginPath(); ctx.ellipse(-25, armY+10, 10, 15, 0.5, 0, Math.PI*2); ctx.fill(); // Esq
+                // Luvas
+                ctx.fillStyle = C_GLOVE;
+                ctx.beginPath(); ctx.arc(32, armY-35, 12, 0, Math.PI*2); ctx.fill(); // Punho Cima
+                ctx.beginPath(); ctx.arc(-30, armY+20, 10, 0, Math.PI*2); ctx.fill(); // Mão Baixo
+            } 
+            else {
+                // Correndo (Balança oposto às pernas)
+                const armSwing = this.action === 'run' ? -cycle : 0;
+                // Esq
+                ctx.beginPath(); ctx.ellipse(-28 + (armSwing*0.5), armY + 10, 10, 18, 0.5 + (armSwing*0.02), 0, Math.PI*2); ctx.fill();
+                // Dir
+                ctx.beginPath(); ctx.ellipse(28 - (armSwing*0.5), armY + 10, 10, 18, -0.5 - (armSwing*0.02), 0, Math.PI*2); ctx.fill();
+                
+                // Luvas
+                ctx.fillStyle = C_GLOVE;
+                ctx.beginPath(); ctx.arc(-32 + (armSwing*0.8), armY+25, 10, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(32 - (armSwing*0.8), armY+25, 10, 0, Math.PI*2); ctx.fill();
+            }
+
+            // --- 5. CABEÇA (Grande e Redonda) ---
+            const headY = bodyY - 25;
+            
+            // Rosto
+            ctx.fillStyle = C_SKIN;
+            ctx.beginPath(); ctx.arc(0, headY, 26, 0, Math.PI*2); ctx.fill();
+            
+            // Nariz (Batata)
+            ctx.beginPath(); ctx.ellipse(0, headY+5, 8, 6, 0, 0, Math.PI*2); ctx.fill();
+
+            // Bigode (Preto e Grosso)
+            ctx.fillStyle = '#000';
             ctx.beginPath();
-            ctx.moveTo(headX-22, headY-10);
-            ctx.quadraticCurveTo(headX-50, headY-15+wind, headX-70, headY+5+wind);
-            ctx.stroke();
+            ctx.moveTo(-12, headY+12);
+            ctx.quadraticCurveTo(0, headY+8, 12, headY+12); // Cima
+            ctx.quadraticCurveTo(14, headY+16, 0, headY+18); // Baixo
+            ctx.quadraticCurveTo(-14, headY+16, -12, headY+12);
+            ctx.fill();
+
+            // Olhos (Ovais Pretos)
+            ctx.beginPath(); ctx.ellipse(-8, headY-4, 4, 7, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(8, headY-4, 4, 7, 0, 0, Math.PI*2); ctx.fill();
+            // Brilho dos olhos
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(-7, headY-7, 2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(9, headY-7, 2, 0, Math.PI*2); ctx.fill();
+
+            // --- 6. BONÉ (Vermelho com Aba) ---
+            ctx.fillStyle = C_SHIRT; // Vermelho
+            // Cúpula
+            ctx.beginPath(); ctx.arc(0, headY-8, 26, Math.PI, 0); ctx.fill();
+            // Aba
+            ctx.fillRect(-28, headY-12, 56, 8);
+            // Símbolo "M" (opcional, branco)
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(0, headY-15, 8, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'red';
+            ctx.font = "bold 10px Arial"; ctx.textAlign="center"; 
+            ctx.fillText("M", 0, headY-12);
 
             ctx.restore();
 
@@ -541,6 +591,23 @@
                 else if(this.action === 'crouch') { ctx.fillStyle = "#ffff00"; ctx.fillText("AGACHADO", x, y - (h*0.22)); }
                 ctx.shadowBlur = 0;
             }
+        },
+
+        // Helper para desenhar membros arredondados
+        drawLimb: function(ctx, x, y, w, h, angleDeg) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angleDeg * Math.PI / 180);
+            ctx.beginPath();
+            ctx.ellipse(0, h/2, w/2, h/2, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+        },
+
+        drawOval: function(ctx, x, y, w, h) {
+            ctx.beginPath();
+            ctx.ellipse(x, y, w/2, h/2, 0, 0, Math.PI*2);
+            ctx.fill();
         },
 
         drawCalibration: function(ctx, w, h, cx) {
