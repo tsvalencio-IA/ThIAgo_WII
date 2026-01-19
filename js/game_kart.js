@@ -1,4 +1,4 @@
-// LÓGICA DO JOGO: KART DO OTTO (MARIO KART PHYSICS & WII COMFORT)
+// LÓGICA DO JOGO: KART DO OTTO (ULTIMATE NINTENDO EDITION - PROGRESSIVE INPUT)
 (function() {
     // Sistema de partículas para fumaça, terra e "speed lines"
     let particles = [];
@@ -19,9 +19,12 @@
         visualTilt: 0,  // Inclinação do chassi (Body Roll)
         bounce: 0,      // Vibração do motor
         
-        // --- ESTADO DO VOLANTE VIRTUAL ---
+        // --- ESTADO DO INPUT (PROGRESSIVO) ---
+        inputState: 0,  // 0=Nenhuma, 1=Uma Mão, 2=Duas Mãos (Volante)
+        hands: { left: null, right: null }, // Posições brutas para renderizar luvas
+        
         wheel: {
-            radius: 0, x: 0, y: 0, opacity: 0
+            radius: 0, x: 0, y: 0, opacity: 0, angle: 0
         },
         
         // --- OBJETOS DO MUNDO ---
@@ -38,140 +41,148 @@
             this.obs = []; 
             this.enemies = [];
             particles = [];
+            this.inputState = 0;
             
-            // Som de partida clássico
-            window.System.msg("LIGUEM OS MOTORES!"); 
-            window.Sfx.play(150, 'sawtooth', 0.8, 0.2); 
-            setTimeout(() => window.Sfx.play(300, 'square', 1.0, 0.1), 1000);
+            // Som de partida clássico estilo Mario Kart
+            window.System.msg("PREPARAR..."); 
+            window.Sfx.play(100, 'sawtooth', 0.5, 0.2); 
+            setTimeout(() => {
+                window.System.msg("VAI!");
+                window.Sfx.play(400, 'square', 1.0, 0.1);
+            }, 1500);
         },
         
         update: function(ctx, w, h, pose) {
             const d = Logic; 
             const cx = w / 2;
-            const horizon = h * 0.35; // Horizonte fixo (Referência MK SNES/Wii)
+            const horizon = h * 0.35; // Horizonte fixo (Referência MK Wii)
 
             // =================================================================
-            // 1. INPUT E FÍSICA "NINTENDO TUNED" (THE SECRET SAUCE)
+            // 1. DETECÇÃO DE MÃOS E ESTADOS (PROGRESSIVE INPUT SYSTEM)
             // =================================================================
+            d.inputState = 0;
+            d.hands.left = null;
+            d.hands.right = null;
+
             let targetAngle = 0;
-            
-            // Relação de velocidade (0.0 a 1.0+). Usada para ponderar todas as assistências.
-            // Em alta velocidade, o jogo ajuda mais na estabilidade.
             const speedRatio = Math.min(1.2, d.speed / (h * 0.08));
 
-            // Input de Pose (Mãos)
             if(pose) {
                 const kp = pose.keypoints;
                 const lw = kp.find(k=>k.name==='left_wrist');
                 const rw = kp.find(k=>k.name==='right_wrist');
                 
-                if(lw && rw && lw.score > 0.4 && rw.score > 0.4) {
-                    // --- Mapeamento Visual e Geometria do Volante ---
-                    const p1 = window.Gfx.map(lw, w, h);
-                    const p2 = window.Gfx.map(rw, w, h);
+                // Mapeia coordenadas se existirem
+                if(lw && lw.score > 0.4) d.hands.left = window.Gfx.map(lw, w, h);
+                if(rw && rw.score > 0.4) d.hands.right = window.Gfx.map(rw, w, h);
 
-                    const centerX = (p1.x + p2.x) / 2;
-                    const centerY = (p1.y + p2.y) / 2;
-                    const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-                    
-                    d.wheel.x += (centerX - d.wheel.x) * 0.2;
-                    d.wheel.y += (centerY - d.wheel.y) * 0.2;
-                    let targetRadius = Math.max(w * 0.08, Math.min(w * 0.25, dist / 2));
-                    d.wheel.radius += (targetRadius - d.wheel.radius) * 0.1;
-                    d.wheel.opacity = Math.min(1, d.wheel.opacity + 0.1);
-
-                    // --- CÁLCULO DE ÂNGULO COM FILTRO "WII COMFORT" ---
-                    const dy = p2.y - p1.y; 
-                    const dx = p2.x - p1.x;
-                    let rawAngle = Math.atan2(dy, dx);
-                    
-                    // [SECRET 1] DEADZONE DINÂMICA
-                    // Baixa velocidade = 5% (precisão). Alta velocidade = 20% (conforto de estrada).
-                    // Isso evita que o carro balance na reta.
-                    const dynamicDeadzone = 0.05 + (0.15 * speedRatio);
-                    
-                    if(Math.abs(rawAngle) < dynamicDeadzone) {
-                        rawAngle = 0;
-                    } else {
-                        // Subtrai deadzone para evitar "salto" no input
-                        rawAngle = rawAngle - (Math.sign(rawAngle) * dynamicDeadzone);
-                    }
-                    
-                    // [SECRET 2] CURVA DE RESPOSTA NÃO-LINEAR (Power 2.4)
-                    // 0-30% de movimento físico = 5% de resposta no jogo (Estabilidade total)
-                    // 30-70% de movimento = Resposta linear
-                    // 80-100% = Drifting agressivo
-                    targetAngle = Math.sign(rawAngle) * Math.pow(Math.abs(rawAngle), 2.4) * 3.0 * window.System.sens;
-                    
-                    // Auto-Gas (Mario Kart Style: Acelera sempre, freia no B)
-                    if(d.speed < h * 0.075) d.speed += h * 0.0006; 
-
-                } else { 
-                    d.wheel.opacity *= 0.9; 
-                    d.speed *= 0.97; // Freio motor
-                    targetAngle = 0; // Auto-center se soltar
-                }
+                // Define Estado
+                if(d.hands.left && d.hands.right) d.inputState = 2; // Volante Completo
+                else if (d.hands.left || d.hands.right) d.inputState = 1; // Modo Luva Única
+                else d.inputState = 0; // Sem Input
             }
-            
-            // [SECRET 3] AUTO-CENTERING PESADO
-            // O volante não volta instantaneamente. Ele tem "peso".
-            // Quanto mais rápido o carro, mais "duro" o volante fica (Inércia Giroscópica).
-            const heavySteering = 0.04 + (0.08 * (1 - speedRatio)); 
-            d.steer += (targetAngle - d.steer) * heavySteering;
-            d.steer = Math.max(-1.6, Math.min(1.6, d.steer)); // Clamp físico
 
-            // Atualiza volante DOM (fallback oculto)
+            // =================================================================
+            // 2. FÍSICA DO VOLANTE (QUANDO ATIVO)
+            // =================================================================
+            if(d.inputState === 2) {
+                const p1 = d.hands.left;
+                const p2 = d.hands.right;
+
+                // Centro e Raio do Volante
+                const centerX = (p1.x + p2.x) / 2;
+                const centerY = (p1.y + p2.y) / 2;
+                const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+
+                // Suavização visual (Lerp)
+                d.wheel.x += (centerX - d.wheel.x) * 0.25;
+                d.wheel.y += (centerY - d.wheel.y) * 0.25;
+                let targetRadius = Math.max(w * 0.10, Math.min(w * 0.28, dist / 2));
+                d.wheel.radius += (targetRadius - d.wheel.radius) * 0.15;
+                d.wheel.opacity = Math.min(1, d.wheel.opacity + 0.15); // Fade in rápido
+
+                // Cálculo do Ângulo (Física)
+                const dy = p2.y - p1.y; 
+                const dx = p2.x - p1.x;
+                let rawAngle = Math.atan2(dy, dx);
+
+                // [MARIO KART PHYSICS 1] DEADZONE DINÂMICA
+                // Aumenta com a velocidade para estabilidade em retas
+                const dynamicDeadzone = 0.06 + (0.12 * speedRatio);
+                
+                if(Math.abs(rawAngle) < dynamicDeadzone) {
+                    rawAngle = 0;
+                } else {
+                    rawAngle = rawAngle - (Math.sign(rawAngle) * dynamicDeadzone);
+                }
+                
+                // [MARIO KART PHYSICS 2] RESPOSTA EXPONENCIAL
+                // Centro suave, pontas agressivas (Drift feel)
+                targetAngle = Math.sign(rawAngle) * Math.pow(Math.abs(rawAngle), 2.2) * 2.8 * window.System.sens;
+                
+                // Auto-Aceleração (Nintendo Style)
+                if(d.speed < h * 0.075) d.speed += h * 0.0007; 
+
+            } else {
+                // Se não tem as duas mãos, volante desaparece e carro desacelera
+                d.wheel.opacity *= 0.8;
+                d.speed *= 0.96; // Freio motor
+                targetAngle = 0; // Auto-center
+            }
+
+            // [MARIO KART PHYSICS 3] PESO E INÉRCIA
+            // O volante virtual tem "peso". Não vira instantaneamente.
+            const heavySteering = 0.05 + (0.10 * (1 - speedRatio)); 
+            d.steer += (targetAngle - d.steer) * heavySteering;
+            d.steer = Math.max(-1.6, Math.min(1.6, d.steer)); // Trava física
+
+            // Atualiza ângulo visual do volante (separado da física para ser suave)
+            d.wheel.angle = d.steer;
+
+            // Esconde volante antigo da UI
             const uiWheel = document.getElementById('visual-wheel');
             if(uiWheel) uiWheel.style.opacity = '0'; 
 
             // =================================================================
-            // 2. CÁLCULO DE MOVIMENTO (TRACK AS PROTAGONIST)
+            // 3. FÍSICA DE MOVIMENTO (PISTA x CARRO)
             // =================================================================
             d.pos += d.speed;
             d.score += Math.floor(d.speed * 0.2);
             
-            // A Curva da Pista
+            // Curvatura da Pista
             d.curve = Math.sin(d.pos * 0.002) * 2.2; 
             
-            // [SECRET 4] ASSISTÊNCIA DE CURVA (INTENTION DETECTION)
-            // Se a pista curva para ESQUERDA e o jogador esterça para ESQUERDA...
-            // O jogo REDUZ a força centrífuga. "Você entendeu a curva, eu te ajudo."
-            let centrifugalForce = 0.85; // Força padrão que te joga pra fora
-            
-            // Se sinais opostos na matemática (mas mesma direção visual), o jogador está ajudando
-            // Obs: Na projeção atual, Curve e Steer interagem inversamente no X
+            // [MARIO KART PHYSICS 4] ASSISTÊNCIA DE CURVA INTELIGENTE
+            let centrifugalForce = 0.85; 
             const turningIntoCurve = (Math.sign(d.curve) !== Math.sign(d.steer)); 
-            if(turningIntoCurve && Math.abs(d.steer) > 0.2) {
-                centrifugalForce = 0.35; // GRIP MÁGICO ativado
+            if(turningIntoCurve && Math.abs(d.steer) > 0.25) {
+                centrifugalForce = 0.40; // Se ajudar na curva, a pista "solta" o carro
             }
 
-            // [SECRET 5] EIXO CENTRAL VIRTUAL (LANE KEEP ASSIST)
-            // Se o jogador está com o volante "quase" reto (tentando andar reto)...
-            // O jogo aplica uma força invisível suave puxando para X=0 (Centro da Pista)
-            if(Math.abs(d.steer) < 0.3) {
-                d.x = d.x * 0.98; // 2% de correção por frame em direção ao centro
+            // [MARIO KART PHYSICS 5] LANE ASSIST (IMÃ DE CENTRO)
+            // Se estiver quase reto, puxa suavemente para o centro da pista
+            if(Math.abs(d.steer) < 0.2) {
+                d.x = d.x * 0.985; 
             }
 
-            // CÁLCULO FINAL DE POSIÇÃO
-            // X = (Volante * Grip) - (Curva * Velocidade * Força Centrífuga)
-            d.x += (d.steer * 0.09) - (d.curve * (d.speed/h) * centrifugalForce);
+            // Cálculo Final de Posição X
+            const grip = 1.0 - (speedRatio * 0.05);
+            d.x += (d.steer * 0.095 * grip) - (d.curve * (d.speed/h) * centrifugalForce);
             
-            // Colisão Bordas (Off-road perdoável)
+            // Colisão Bordas
             let isOffRoad = false;
-            // Aumentado limite para 1.5 (Pista mais larga virtualmente)
             if(Math.abs(d.x) > 1.5) { 
-                d.speed *= 0.94; isOffRoad = true; d.x = d.x > 0 ? 1.5 : -1.5;
-                if(d.speed > 2) { window.Gfx.shake(Math.random()*2); if(Math.random()<0.2) window.Sfx.play(100,'noise',0.1,0.05); }
+                d.speed *= 0.93; isOffRoad = true; d.x = d.x > 0 ? 1.5 : -1.5;
+                if(d.speed > 2) { window.Gfx.shake(Math.random()*2.5); if(Math.random()<0.2) window.Sfx.play(100,'noise',0.1,0.05); }
             }
 
-            // Efeitos de Chassis (Visual apenas)
+            // Vibração Visual
             d.bounce = Math.sin(Date.now() / 30) * (1 + speedRatio * 2);
             if(isOffRoad) d.bounce = (Math.random() - 0.5) * 12;
-            // Inclinação visual segue o volante, não a física, para feedback imediato
             d.visualTilt += (d.steer - d.visualTilt) * 0.2;
 
             // =================================================================
-            // 3. LOGICA DE OBJETOS
+            // 4. OBJETOS DO MUNDO (SPAWN)
             // =================================================================
             if(Math.random() < 0.025 && d.speed > 5) {
                 const type = Math.random() < 0.3 ? 'sign' : 'cone';
@@ -189,12 +200,14 @@
             }
 
             // =================================================================
-            // 4. RENDERIZAÇÃO: CENÁRIO NINTENDO (VIBRANTE & LIMPO)
+            // 5. RENDERIZAÇÃO: CENÁRIO NINTENDO STYLE
             // =================================================================
+            // Céu
             const gradSky = ctx.createLinearGradient(0, 0, 0, horizon);
             gradSky.addColorStop(0, "#0099ff"); gradSky.addColorStop(1, "#87CEEB");
             ctx.fillStyle = gradSky; ctx.fillRect(0, 0, w, horizon);
 
+            // Montanhas/Nuvens Parallax
             ctx.fillStyle = 'rgba(255,255,255,0.8)';
             const bgX = d.steer * 80 + (d.curve * 150);
             const drawCloud = (cx, cy, s) => { ctx.beginPath(); ctx.arc(cx, cy, 30*s, 0, Math.PI*2); ctx.arc(cx+25*s, cy-10*s, 35*s, 0, Math.PI*2); ctx.arc(cx+50*s, cy, 30*s, 0, Math.PI*2); ctx.fill(); };
@@ -205,13 +218,14 @@
             ctx.quadraticCurveTo(w*0.8, horizon - 80, w, horizon);
             ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.fill();
 
+            // Grama
             const grassColor1 = '#32cd32'; ctx.fillStyle = grassColor1; ctx.fillRect(0, horizon, w, h);
 
-            // PISTA
+            // PISTA (PROJEÇÃO)
             const roadW_Far = w * 0.01; const roadW_Near = w * 2.2;
             const roadCurveVis = d.curve * (w * 0.7);
 
-            // Zebras
+            // Zebras (Curbs)
             const zebraSize = w * 0.35; const segmentSize = 40; const segmentPhase = Math.floor(d.pos / segmentSize) % 2;
             ctx.fillStyle = (segmentPhase === 0) ? '#ff0000' : '#ffffff';
             ctx.beginPath();
@@ -230,7 +244,7 @@
             ctx.lineTo(cx - roadW_Near, h);
             ctx.fill();
 
-            // Speed Lines
+            // Speed Lines (Textura)
             if(d.speed > 1) {
                 ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 4;
                 ctx.beginPath();
@@ -254,7 +268,7 @@
             ctx.stroke(); ctx.setLineDash([]);
 
             // =================================================================
-            // 5. OBJETOS (Z-SORTING)
+            // 6. OBJETOS (Z-SORTING)
             // =================================================================
             let drawQueue = [];
             d.obs.forEach((o, i) => {
@@ -305,7 +319,7 @@
             });
 
             // =================================================================
-            // 6. PLAYER KART
+            // 7. PLAYER KART
             // =================================================================
             const carScale = w * 0.0055;
             const carX = cx + (d.x * w * 0.3);
@@ -320,7 +334,7 @@
             }
             if(isOffRoad) particles.push({x: carX, y: carY+10, vx: (Math.random()-0.5)*5, vy: 5, s: 8, c: '#8B4513', l: 30});
 
-            // Kart Model
+            // Modelo do Kart (Retro)
             ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(0, 25, 50, 15, 0, 0, Math.PI*2); ctx.fill();
             ctx.fillStyle = '#111'; ctx.fillRect(-50, 5, 25, 25); ctx.fillRect(25, 5, 25, 25);
             ctx.fillStyle = '#ddd'; ctx.fillRect(-45, 10, 15, 15); ctx.fillRect(30, 10, 15, 15);
@@ -346,7 +360,7 @@
             particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.l--; if(p.l <= 0) particles.splice(i, 1); else { ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI*2); ctx.fill(); } });
 
             // =================================================================
-            // 7. HUD E INTERFACE
+            // 8. HUD
             // =================================================================
             const hudX = w - 80; const hudY = h - 60;
             ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.arc(hudX, hudY, 50, 0, Math.PI*2); ctx.fill();
@@ -360,31 +374,91 @@
             ctx.fillStyle = hpColor; ctx.fillRect(cx - hpW/2 + 2, 22, (hpW-4) * (d.health/100), 6);
 
             // =================================================================
-            // 8. VOLANTE VIRTUAL 1:1
+            // 9. RENDERIZAÇÃO DE INPUT PROGRESSIVO (GLOVE -> WHEEL)
             // =================================================================
-            if(d.wheel.opacity > 0.05) {
+            // Função auxiliar para desenhar uma luva flutuante
+            const drawGlove = (x, y, label) => {
+                const s = w * 0.08;
+                const grad = ctx.createRadialGradient(x, y, s*0.2, x, y, s);
+                grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, '#cccccc');
+                
+                ctx.save();
+                ctx.shadowColor = '#3498db'; ctx.shadowBlur = 15;
+                ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.arc(x, y, s*0.6, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.font = "bold 24px Arial"; ctx.textAlign="center"; ctx.textBaseline="middle"; 
+                ctx.fillText(label, x, y);
+                ctx.restore();
+            };
+
+            if(d.inputState === 1) {
+                // Estado: UMA MÃO (Mostra luva individual)
+                if(d.hands.left) drawGlove(d.hands.left.x, d.hands.left.y, "L");
+                if(d.hands.right) drawGlove(d.hands.right.x, d.hands.right.y, "R");
+                
+                // Texto de ajuda
+                ctx.fillStyle = "#fff"; ctx.font = "bold 24px Arial"; ctx.textAlign = "center";
+                ctx.shadowColor = "black"; ctx.shadowBlur = 5;
+                ctx.fillText("USE AS DUAS MÃOS!", cx, h * 0.2);
+                ctx.shadowBlur = 0;
+            }
+            else if (d.inputState === 2 && d.wheel.opacity > 0.05) {
+                // Estado: DUAS MÃOS (VOLANTE ESPORTIVO COMPLETO)
                 ctx.save();
                 ctx.globalAlpha = d.wheel.opacity;
                 ctx.translate(d.wheel.x, d.wheel.y);
-                ctx.rotate(d.steer); 
+                ctx.rotate(d.wheel.angle); // Usa o ângulo suavizado
+                
                 const r = d.wheel.radius;
 
-                ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 20; ctx.shadowOffsetY = 10;
-                ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.arc(0, 0, r * 0.75, 0, Math.PI*2, true); 
-                ctx.fillStyle = '#f0f0f0'; ctx.fill();
-                ctx.strokeStyle = '#ddd'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.stroke();
+                // Sombra Profunda (3D)
+                ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 15;
+
+                // Aro Externo (Branco Lustroso)
+                ctx.fillStyle = '#f5f5f5'; 
+                ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
                 
+                // Aro Interno (Buraco)
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.beginPath(); ctx.arc(0, 0, r * 0.7, 0, Math.PI*2); ctx.fill();
+                ctx.globalCompositeOperation = 'source-over';
+
+                // Bordas de Acabamento
+                ctx.strokeStyle = '#ccc'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.stroke();
+                ctx.beginPath(); ctx.arc(0, 0, r * 0.7, 0, Math.PI*2); ctx.stroke();
+
+                // Miolo Central (Preto Esportivo)
                 ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
-                ctx.fillStyle = '#f0f0f0'; ctx.beginPath(); ctx.arc(0, 0, r * 0.25, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#e0e0e0'; ctx.fillRect(-r*0.8, -r*0.1, r*0.8, r*0.2); ctx.fillRect(0, -r*0.1, r*0.8, r*0.2);
-                ctx.beginPath(); ctx.moveTo(-r*0.15, 0); ctx.lineTo(r*0.15, 0); ctx.lineTo(0, r*0.8); ctx.fill();
+                ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(0, 0, r * 0.25, 0, Math.PI*2); ctx.fill();
 
-                ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.ellipse(-r*0.9, 0, r*0.1, r*0.25, 0, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.ellipse(r*0.9, 0, r*0.1, r*0.25, 0, 0, Math.PI*2); ctx.fill();
+                // Hastes (Spokes) Racing
+                ctx.fillStyle = '#ddd';
+                // Haste Esquerda
+                ctx.beginPath(); ctx.moveTo(-r*0.2, 0); ctx.lineTo(-r*0.72, -r*0.1); ctx.lineTo(-r*0.72, r*0.1); ctx.lineTo(-r*0.2, 0); ctx.fill();
+                // Haste Direita
+                ctx.beginPath(); ctx.moveTo(r*0.2, 0); ctx.lineTo(r*0.72, -r*0.1); ctx.lineTo(r*0.72, r*0.1); ctx.lineTo(r*0.2, 0); ctx.fill();
+                // Haste Baixo (Vazada)
+                ctx.fillStyle = '#ccc';
+                ctx.beginPath(); ctx.moveTo(-r*0.1, r*0.1); ctx.lineTo(r*0.1, r*0.1); ctx.lineTo(0, r*0.7); ctx.fill();
 
-                ctx.fillStyle = '#ccc'; ctx.beginPath(); ctx.arc(0, 0, r*0.15, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#555'; ctx.font = `bold ${r*0.15}px Arial`; ctx.textBaseline = 'middle'; ctx.fillText("Wii", 0, 2);
-                ctx.fillStyle = '#e74c3c'; ctx.fillRect(-r*0.05, -r, r*0.1, r*0.15);
+                // GRIPS (Pegada Azul Antiderrapante)
+                ctx.fillStyle = '#3498db';
+                ctx.beginPath(); ctx.arc(-r*0.85, 0, r*0.12, 0, Math.PI*2); ctx.fill(); // Esq
+                ctx.beginPath(); ctx.arc(r*0.85, 0, r*0.12, 0, Math.PI*2); ctx.fill();  // Dir
+
+                // SPORTY RED STRIPE (Marcador de Centro - 12 horas)
+                ctx.fillStyle = '#e74c3c';
+                ctx.beginPath();
+                ctx.moveTo(-r*0.06, -r); ctx.lineTo(r*0.06, -r);
+                ctx.lineTo(r*0.04, -r*0.7); ctx.lineTo(-r*0.04, -r*0.7);
+                ctx.fill();
+
+                // Logotipo
+                ctx.fillStyle = '#fff'; ctx.font = `bold ${r*0.12}px Arial`; 
+                ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+                ctx.fillText("Wii", 0, 0);
+
                 ctx.restore();
             }
 
