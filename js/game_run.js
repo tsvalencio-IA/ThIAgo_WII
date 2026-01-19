@@ -1,5 +1,5 @@
 // =============================================================================
-// LÓGICA DO JOGO: OTTO SUPER RUN (NINTENDO STYLE - BACK VIEW)
+// LÓGICA DO JOGO: OTTO SUPER RUN (NINTENDO STYLE - BACK VIEW FIXED)
 // ARQUITETO: THIAGUINHO WII (CODE 177)
 // =============================================================================
 
@@ -467,16 +467,15 @@
             const C_BOOT = '#654321';
             const C_GLOVE = '#ffffff';
 
-            // --- 1. PERNAS (Banhadas, curtas e grossas) ---
+            // --- 1. PERNAS (Visão Traseira) ---
             ctx.fillStyle = C_OVERALL;
-            // Para desenhar de costas, a ordem não muda muito, mas os pés podem mostrar sola
             if(this.action === 'run') {
                 // Perna Esq
                 this.drawLimb(ctx, -15, 0, 14, 30, cycle);
                 // Perna Dir
                 this.drawLimb(ctx, 15, 0, 14, 30, -cycle);
             } else if (this.action === 'jump') {
-                // Pulo (uma dobrada)
+                // Pulo
                 this.drawLimb(ctx, -15, -10, 14, 25, -20);
                 this.drawLimb(ctx, 15, 5, 14, 35, 10);
             } else { // Crouch
@@ -487,7 +486,7 @@
             // --- 2. BOTAS (Visão Traseira - Calcanhar/Sola) ---
             const drawBootBack = (bx, by, lift) => {
                 ctx.fillStyle = C_BOOT;
-                this.drawOval(ctx, bx, by, 16, 12); // Base da bota
+                this.drawOval(ctx, bx, by, 16, 12); // Base da bota (calcanhar)
                 if(lift > 5) {
                     // Se o pé está levantado correndo, mostra a sola cinza escura
                     ctx.fillStyle = '#333';
@@ -496,6 +495,7 @@
             };
 
             if(this.action === 'run') {
+                // Simula levantar o pé (lift) baseado no ciclo
                 drawBootBack(-15 + (cycle*0.8), 30 - (Math.abs(cycle)*0.2), cycle);
                 drawBootBack(15 - (cycle*0.8), 30 - (Math.abs(cycle)*0.2), -cycle);
             } else if (this.action === 'jump') {
@@ -514,24 +514,25 @@
             ctx.fillStyle = C_SHIRT;
             ctx.beginPath(); ctx.arc(0, bodyY, 28, 0, Math.PI*2); ctx.fill();
             
-            // Macacão Azul (Costas - Mais alto, sem botões, alças cruzadas)
+            // Macacão Azul (Costas - Mais alto, sem botões)
             ctx.fillStyle = C_OVERALL;
             ctx.fillRect(-20, bodyY, 40, 30);
             ctx.beginPath(); ctx.arc(0, bodyY+30, 21, 0, Math.PI, false); ctx.fill(); // Fundo arredondado
             
-            // Alças cruzadas nas costas (Simulação simples)
+            // Alças cruzadas nas costas
             ctx.fillStyle = C_OVERALL; 
             // Alça Esq indo pra Dir
             ctx.beginPath(); ctx.moveTo(-15, bodyY-15); ctx.lineTo(15, bodyY+15); ctx.lineTo(5, bodyY+15); ctx.lineTo(-25, bodyY-15); ctx.fill();
             // Alça Dir indo pra Esq
             ctx.beginPath(); ctx.moveTo(15, bodyY-15); ctx.lineTo(-15, bodyY+15); ctx.lineTo(-5, bodyY+15); ctx.lineTo(25, bodyY-15); ctx.fill();
 
-            // --- 4. BRAÇOS (Vistos de trás - Cotovelos) ---
+            // --- 4. BRAÇOS (Vistos de trás) ---
             ctx.fillStyle = C_SHIRT;
             const armY = bodyY - 5;
-            // A lógica de balanço é a mesma, mas desenhamos "por cima" do corpo se estiverem para trás
+            
             if(this.action === 'jump') {
-                // Braço Soco pra Cima
+                // Braço Soco pra Cima (Visto de trás, o braço fica na frente da cabeça se muito alto, ou atrás)
+                // Vamos desenhar atrás da cabeça para simplificar a camada
                 ctx.beginPath(); ctx.ellipse(25, armY-20, 10, 20, -0.5, 0, Math.PI*2); ctx.fill(); // Dir
                 ctx.beginPath(); ctx.ellipse(-25, armY+10, 10, 15, 0.5, 0, Math.PI*2); ctx.fill(); // Esq
                 // Luvas
@@ -553,7 +554,7 @@
                 ctx.beginPath(); ctx.arc(32 - (armSwing*0.8), armY+25, 10, 0, Math.PI*2); ctx.fill();
             }
 
-            // --- 5. CABEÇA (Nuca) ---
+            // --- 5. CABEÇA (Nuca e Cabelo) ---
             const headY = bodyY - 25;
             
             // Pele
@@ -562,14 +563,15 @@
             
             // Cabelo (Parte de trás da cabeça)
             ctx.fillStyle = C_HAIR;
+            // Forma do cabelo na nuca
             ctx.beginPath(); 
-            ctx.arc(0, headY, 26, 0, Math.PI, false); // Meia lua inferior
+            ctx.arc(0, headY+2, 25, 0, Math.PI, false); // Meia lua inferior
             ctx.fill();
             // Recorte do pescoço
             ctx.fillStyle = C_SKIN;
             ctx.beginPath(); ctx.ellipse(0, headY+15, 10, 8, 0, 0, Math.PI*2); ctx.fill();
 
-            // Bandana (Nó visível na nuca)
+            // Bandana (Nó visível na nuca) - IDENTIDADE DO OTTO
             const wind = Math.sin(this.f * 0.8) * 12;
             
             // Pontas da bandana voando "para a tela" (pois o vento vem de frente na corrida)
@@ -589,9 +591,8 @@
             ctx.fillStyle = C_SHIRT; // Vermelho
             // Cúpula (Cobre o topo da cabeça)
             ctx.beginPath(); ctx.arc(0, headY-5, 27, Math.PI, 0); ctx.fill();
-            // Aba (Não visível ou apenas uma linha fina no topo se ele estiver olhando pra frente)
-            // Vamos desenhar um detalhe no topo para simular a profundidade da aba indo pra longe
-            ctx.fillStyle = '#cc0000'; // Vermelho mais escuro
+            // Aba (Não visível de costas, ou apenas um detalhe sugerido)
+            ctx.fillStyle = '#cc0000'; // Vermelho mais escuro (sombra da aba)
             ctx.beginPath(); ctx.ellipse(0, headY-30, 20, 3, 0, Math.PI, 0); ctx.fill();
 
             ctx.restore();
