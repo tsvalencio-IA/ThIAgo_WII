@@ -1,54 +1,70 @@
-// LÓGICA DO JOGO: OTTO OLYMPICS (LAYOUT CORRIGIDO & WIDE VIEW)
+// =============================================================================
+// LÓGICA DO JOGO: OTTO OLYMPICS (ESTILO MARIO RUN - PERSPECTIVA 3D)
+// =============================================================================
+
 (function() {
     const Logic = {
-        lane: 0, 
-        action: 'run', // run, jump, crouch
-        sc: 0, 
-        f: 0, 
-        obs: [], 
+        // Estado do Jogo
+        sc: 0,              // Pontuação
+        f: 0,               // Contador de Frames
+        lane: 0,            // Faixa atual (-1: Esq, 0: Centro, 1: Dir)
+        action: 'run',      // Ação atual: 'run', 'jump', 'crouch'
         
-        // Calibração Inteligente
-        baseNoseY: 0,
-        calibSamples: [],
-        state: 'calibrate', 
-
-        init: function(){ 
-            this.sc=0; this.obs=[]; this.f=0; 
+        // Calibração
+        state: 'calibrate', // 'calibrate' ou 'play'
+        baseNoseY: 0,       // Altura média do nariz em repouso
+        calibSamples: [],   // Amostras para calibração
+        
+        // Objetos
+        obs: [],            // Obstáculos
+        
+        // Configurações de Gameplay
+        LANE_WIDTH: 200,    // Largura visual das faixas
+        SPEED: 18,          // Velocidade do mundo
+        
+        init: function() { 
+            this.sc = 0; 
+            this.f = 0; 
+            this.obs = []; 
             this.state = 'calibrate';
             this.calibSamples = [];
             this.baseNoseY = 0;
-            window.System.msg("FIQUE PARADO..."); 
+            this.action = 'run';
+            window.System.msg("CALIBRANDO..."); 
         },
 
-        update: function(ctx, w, h, pose){
-            const cx = w / 2; 
+        update: function(ctx, w, h, pose) {
+            const cx = w / 2; // Centro X da tela
+            
+            // Definição do Horizonte (40% da altura para dar profundidade)
+            const horizon = h * 0.40;
+            const groundH = h - horizon;
+
             this.f++;
 
             // =================================================================
-            // 1. INPUT E DETECÇÃO
+            // 1. INPUT E DETECÇÃO (CALIBRAÇÃO & CONTROLE)
             // =================================================================
             
-            if(pose){
-                const n = pose.keypoints.find(k=>k.name==='nose');
+            if(pose) {
+                const n = pose.keypoints.find(k => k.name === 'nose');
                 
                 if(n && n.score > 0.4) {
-                    if(n.x < 210) this.lane = 1;      
-                    else if(n.x > 430) this.lane = -1; 
-                    else this.lane = 0;
-
+                    // --- MODO CALIBRAÇÃO ---
                     if(this.state === 'calibrate') {
                         this.calibSamples.push(n.y);
                         
-                        // Fundo de calibração semi-transparente
-                        ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,w,h);
-                        ctx.fillStyle = "#fff"; ctx.font = "bold 24px Arial"; ctx.textAlign = "center";
-                        ctx.fillText("CALIBRANDO...", cx, h*0.4);
-                        ctx.font = "16px Arial"; 
-                        ctx.fillText("Fique em posição natural", cx, h*0.45);
+                        // Visual da Calibração
+                        ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,w,h);
+                        ctx.fillStyle = "#fff"; ctx.font = "bold 30px 'Russo One'"; ctx.textAlign = "center";
+                        ctx.fillText("FIQUE EM POSIÇÃO NEUTRA", cx, h*0.4);
                         
+                        // Barra de progresso
                         const pct = this.calibSamples.length / 60;
-                        ctx.fillStyle = "#00ff00"; ctx.fillRect(cx - 80, h*0.5, 160 * pct, 10);
-                        ctx.strokeStyle = "#fff"; ctx.strokeRect(cx - 80, h*0.5, 160, 10);
+                        ctx.fillStyle = "#3498db"; 
+                        ctx.fillRect(cx - 150, h*0.5, 300 * pct, 20);
+                        ctx.strokeStyle = "#fff"; ctx.lineWidth = 3;
+                        ctx.strokeRect(cx - 150, h*0.5, 300, 20);
 
                         if(this.calibSamples.length > 60) {
                             const sum = this.calibSamples.reduce((a, b) => a + b, 0);
@@ -57,239 +73,346 @@
                             window.System.msg("LARGADA!"); 
                             window.Sfx.play(400, 'square', 0.5, 0.1); 
                         }
-                        return 0; 
+                        return 0; // Pausa renderização do jogo durante calibração
                     }
+                    
+                    // --- MODO JOGO ---
                     else if(this.state === 'play') {
+                        // 1. Detectar Lane (X)
+                        // Divide a tela em 3 terços virtuais para detecção
+                        if(n.x < w * 0.35) this.lane = 1;       // Direita (Espelhado)
+                        else if(n.x > w * 0.65) this.lane = -1; // Esquerda (Espelhado)
+                        else this.lane = 0;                     // Centro
+
+                        // 2. Detectar Ação (Y relativo à calibração)
                         const diff = n.y - this.baseNoseY;
-                        if(diff < -50) this.action = 'jump';
-                        else if (diff > 50) this.action = 'crouch';
+                        const sensitivity = 40; // Pixels de movimento necessários
+
+                        if(diff < -sensitivity) this.action = 'jump';       // Subiu o nariz = Pulo
+                        else if (diff > sensitivity) this.action = 'crouch'; // Desceu o nariz = Agachou
                         else this.action = 'run';
                     }
                 }
             }
 
             // =================================================================
-            // 2. VISUAL ESPORTIVO (LAYOUT MELHORADO)
+            // 2. CENÁRIO (ESTILO NINTENDO - PERSPECTIVA)
             // =================================================================
             
-            // Horizonte mais alto (h*0.4) para dar mais profundidade à pista
-            const horizon = h * 0.4;
+            // A. CÉU (Degradê Azul Vibrante)
+            const gradSky = ctx.createLinearGradient(0, 0, 0, horizon);
+            gradSky.addColorStop(0, '#00BFFF'); // Deep Sky Blue
+            gradSky.addColorStop(1, '#87CEFA'); // Light Sky Blue
+            ctx.fillStyle = gradSky; ctx.fillRect(0, 0, w, horizon);
 
-            // Céu
-            const gradSky = ctx.createLinearGradient(0,0,0,horizon);
-            gradSky.addColorStop(0, '#00bfff'); gradSky.addColorStop(1, '#cceeff');
-            ctx.fillStyle = gradSky; ctx.fillRect(0,0,w,h);
-
-            // Arquibancada
-            ctx.fillStyle = '#bbb'; ctx.fillRect(0, horizon - h*0.08, w, h*0.08);
-            // Torcida (Pixels)
-            for(let i=0; i<w; i+=15) { 
-                ctx.fillStyle = Math.random() < 0.5 ? '#ff3333' : '#3333ff';
-                if(Math.random()>0.3) ctx.fillRect(i, horizon - h*0.06, 8, 8);
-                if(Math.random()>0.3) ctx.fillRect(i, horizon - h*0.04, 8, 8);
+            // B. ARQUIBANCADA (Torcida Pixelizada)
+            const standH = h * 0.15;
+            ctx.fillStyle = '#555'; ctx.fillRect(0, horizon - standH, w, standH);
+            
+            // Pixels da torcida (efeito estático colorido)
+            for(let i=0; i < w; i+=10) {
+                for(let j=0; j < standH; j+=10) {
+                    if(Math.random() > 0.5) {
+                        const cols = ['#ff0000', '#ffff00', '#0000ff', '#ffffff'];
+                        ctx.fillStyle = cols[Math.floor(Math.random()*cols.length)];
+                        ctx.fillRect(i, (horizon - standH) + j, 6, 6);
+                    }
+                }
             }
 
-            // Gramado
-            ctx.fillStyle = '#339933'; ctx.fillRect(0, horizon, w, h);
+            // C. GRAMADO (Fundo verde)
+            ctx.fillStyle = '#32CD32'; // Lime Green
+            ctx.fillRect(0, horizon, w, groundH);
 
-            // Pista de Atletismo (PERSPECTIVA AJUSTADA)
-            ctx.save(); ctx.translate(cx, horizon);
+            // D. PISTA DE CORRIDA (Trapézio para profundidade)
+            ctx.save();
+            ctx.translate(cx, horizon); // Ponto de fuga no centro do horizonte
+
+            // Largura da pista no horizonte (topo) vs na base da tela
+            const trackTopW = w * 0.1; 
+            const trackBotW = w * 1.0; 
             
-            // Larguras ajustadas para não parecer um triângulo tão agudo
-            const trackW_Top = w * 0.15; // Mais largo no topo
-            const trackW_Bot = w * 1.2;  // Base
-            const trackHeight = h - horizon;
-
+            // Desenha o asfalto (Terracota avermelhado estilo pista olímpica)
             ctx.beginPath();
-            ctx.fillStyle = '#d64541'; // Terracota mais suave
-            ctx.moveTo(-trackW_Top, 0); ctx.lineTo(trackW_Top, 0);
-            ctx.lineTo(trackW_Bot, trackHeight); ctx.lineTo(-trackW_Bot, trackHeight);
+            ctx.fillStyle = '#d65a4e'; 
+            ctx.moveTo(-trackTopW, 0);
+            ctx.lineTo(trackTopW, 0);
+            ctx.lineTo(trackBotW, groundH);
+            ctx.lineTo(-trackBotW, groundH);
             ctx.fill();
 
-            // Linhas das raias
-            ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 3;
-            [-1, -0.33, 0.33, 1].forEach(l => {
+            // Linhas das Raias (Brancas)
+            ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 4;
+            const lanes = [-1, -0.33, 0.33, 1]; // Divisões das 3 pistas
+            lanes.forEach(l => {
                 ctx.beginPath();
-                ctx.moveTo(l * trackW_Top, 0);
-                ctx.lineTo(l * trackW_Bot, trackHeight);
+                // Interpolação linear da perspectiva
+                ctx.moveTo(l * trackTopW, 0);
+                ctx.lineTo(l * trackBotW, groundH);
                 ctx.stroke();
             });
             ctx.restore();
 
             // =================================================================
-            // 3. OBSTÁCULOS
+            // 3. OBSTÁCULOS (SPAWN E LÓGICA)
             // =================================================================
             
-            if(this.state === 'play' && this.f % 70 === 0) { 
-                const type = Math.random() < 0.6 ? 'hurdle' : 'sign'; 
-                const lane = Math.floor(Math.random()*3)-1;
-                this.obs.push({l: lane, z: 1200, type: type}); // Nascem mais longe (Z=1200)
+            if(this.state === 'play' && this.f % 90 === 0) { // Spawn a cada 90 frames
+                const type = Math.random() < 0.5 ? 'hurdle' : 'sign';
+                // Escolhe lane aleatória (-1, 0, 1)
+                const obsLane = Math.floor(Math.random() * 3) - 1; 
+                this.obs.push({
+                    lane: obsLane,
+                    z: 1200,      // Começa longe
+                    type: type,
+                    passed: false
+                });
             }
 
+            // Loop de renderização e lógica dos obstáculos (Do fundo para frente)
             this.obs.forEach((o, i) => {
-                o.z -= 18;
-                if(o.z < -100) { this.obs.splice(i,1); this.sc += 10; return; }
+                o.z -= this.SPEED; // Move em direção à tela
 
-                // Escala ajustada para a nova perspectiva
-                const scale = 300 / (o.z + 300); // Suaviza o crescimento
+                // Remover se passar da tela
+                if(o.z < -200) {
+                    this.obs.splice(i, 1);
+                    return;
+                }
+
+                // Cálculo de Perspectiva (Scale Factor)
+                // Quanto menor o Z, maior a escala (mais perto)
+                const scale = 300 / (300 + o.z);
                 
                 if(scale > 0) {
-                    // Cálculo de posição X interpolando topo e base da pista
-                    const progress = 1 - (o.z / 1200); // 0 (fundo) a 1 (tela)
-                    const currentW = trackW_Top + (trackW_Bot - trackW_Top) * scale; // Aproximação visual
+                    // Posição X: Interpola entre largura do topo e da base baseado na escala
+                    const currentTrackW = trackTopW + (trackBotW - trackTopW) * scale;
+                    // Spread das lanes aumenta conforme chega perto
+                    const laneSpread = currentTrackW * 0.8; 
                     
-                    // Fator de espalhamento das lanes baseado na profundidade
-                    const spread = (w * 0.6) * scale; 
+                    const screenX = cx + (o.lane * laneSpread);
+                    const screenY = horizon + (groundH * scale); // Cola no chão
+                    const size = (w * 0.15) * scale; // Tamanho base visual
 
-                    const ox = cx + (o.l * spread);
-                    const oy = horizon + (scale * (h - horizon)); // Cola no chão corretamente
-                    const sz = w * 0.16 * scale; 
-
-                    // Sombra
+                    // 1. Sombra do Obstáculo
                     ctx.fillStyle = 'rgba(0,0,0,0.3)';
-                    ctx.beginPath(); ctx.ellipse(ox, oy, sz*0.7, sz*0.2, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath();
+                    ctx.ellipse(screenX, screenY, size*0.6, size*0.2, 0, 0, Math.PI*2);
+                    ctx.fill();
 
+                    // 2. Desenha Obstáculo
                     if(o.type === 'hurdle') {
-                        // Barreira
-                        const hH = sz * 0.7; 
+                        // Barreira (Vermelha e Branca)
+                        const hH = size * 0.6; // Altura da barreira
                         ctx.lineWidth = 4 * scale;
                         ctx.strokeStyle = '#ddd'; 
-                        ctx.beginPath(); 
-                        ctx.moveTo(ox - sz/2, oy); ctx.lineTo(ox - sz/2, oy - hH); 
-                        ctx.moveTo(ox + sz/2, oy); ctx.lineTo(ox + sz/2, oy - hH); 
+                        
+                        // Pernas
+                        ctx.beginPath();
+                        ctx.moveTo(screenX - size/2, screenY); ctx.lineTo(screenX - size/2, screenY - hH);
+                        ctx.moveTo(screenX + size/2, screenY); ctx.lineTo(screenX + size/2, screenY - hH);
                         ctx.stroke();
 
-                        ctx.fillStyle = '#fff'; ctx.fillRect(ox - sz/2 - 2, oy - hH - 2, sz + 4, 18 * scale);
-                        ctx.fillStyle = '#111'; 
-                        ctx.fillRect(ox - sz/4, oy - hH - 2, sz/6, 18 * scale);
-                        ctx.fillRect(ox + sz/4, oy - hH - 2, sz/6, 18 * scale);
-
-                        if(scale > 0.4) { ctx.fillStyle='#ffff00'; ctx.font=`bold ${14*scale}px Arial`; ctx.textAlign='center'; ctx.fillText("PULE!", ox, oy - hH - 10); }
+                        // Topo
+                        ctx.fillStyle = '#fff'; ctx.fillRect(screenX - size/2 - 2, screenY - hH - 5*scale, size + 4, 20*scale);
+                        ctx.fillStyle = '#e74c3c'; // Listras vermelhas
+                        ctx.fillRect(screenX - size/4, screenY - hH - 5*scale, size/5, 20*scale);
+                        ctx.fillRect(screenX + size/4, screenY - hH - 5*scale, size/5, 20*scale);
+                        
+                        // Texto Ajuda
+                        if(scale > 0.5 && !o.passed) {
+                            ctx.fillStyle = '#FFFF00'; ctx.font = `bold ${16*scale}px Arial`; ctx.textAlign='center';
+                            ctx.fillText("PULO!", screenX, screenY - hH - 20*scale);
+                        }
                     } 
                     else {
-                        // Placa Alta
-                        const signH = sz * 2.5;
-                        ctx.fillStyle = '#333'; 
-                        ctx.fillRect(ox - sz/2, oy - signH, 6*scale, signH);
-                        ctx.fillRect(ox + sz/2, oy - signH, 6*scale, signH);
+                        // Placa Alta (Azul)
+                        const signH = size * 2.2;
+                        const signW = size * 1.2;
+                        
+                        // Postes
+                        ctx.fillStyle = '#444'; 
+                        ctx.fillRect(screenX - size/2, screenY - signH, 5*scale, signH);
+                        ctx.fillRect(screenX + size/2, screenY - signH, 5*scale, signH);
 
-                        ctx.fillStyle = '#004488';
-                        ctx.fillRect(ox - sz/1.4, oy - signH, sz*1.4, sz*0.7);
-                        ctx.strokeStyle = '#fff'; ctx.lineWidth=2*scale;
-                        ctx.strokeRect(ox - sz/1.4, oy - signH, sz*1.4, sz*0.7);
+                        // Placa
+                        ctx.fillStyle = '#2980b9'; // Azul Esporte
+                        ctx.fillRect(screenX - signW/2, screenY - signH, signW, size*0.8);
+                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 3*scale;
+                        ctx.strokeRect(screenX - signW/2, screenY - signH, signW, size*0.8);
+                        
+                        // Seta ou Texto
+                        ctx.fillStyle = '#fff'; ctx.beginPath();
+                        ctx.moveTo(screenX - 10*scale, screenY - signH + size*0.2);
+                        ctx.lineTo(screenX + 10*scale, screenY - signH + size*0.2);
+                        ctx.lineTo(screenX, screenY - signH + size*0.6);
+                        ctx.fill();
 
-                        if(scale > 0.4) { ctx.fillStyle='#fff'; ctx.font=`bold ${12*scale}px Arial`; ctx.textAlign='center'; ctx.fillText("ABAIXE", ox, oy - signH + sz*0.4); }
+                        // Texto Ajuda
+                        if(scale > 0.5 && !o.passed) {
+                            ctx.fillStyle = '#FFFF00'; ctx.font = `bold ${16*scale}px Arial`; ctx.textAlign='center';
+                            ctx.fillText("ABAIXE!", screenX, screenY - signH - 10*scale);
+                        }
                     }
 
-                    // Colisão
-                    if(o.z < 60 && o.z > -50 && o.l === this.lane) {
-                        let hit = false;
-                        if(o.type === 'hurdle' && this.action !== 'jump') hit = true;
-                        if(o.type === 'sign' && this.action !== 'crouch') hit = true;
-                        if(hit) { window.Gfx.shake(15); window.System.gameOver(this.sc); }
-                        else if(!o.passed) { window.Sfx.play(600, 'sine', 0.1, 0.05); o.passed = true; }
+                    // --- COLISÃO ---
+                    // Z entre 0 e 100 é a zona de impacto ("perto do jogador")
+                    if(o.z < 100 && o.z > 0) {
+                        if(o.lane === this.lane) {
+                            // Se está na mesma faixa, checa a ação
+                            let hit = false;
+                            
+                            if(o.type === 'hurdle' && this.action !== 'jump') hit = true;
+                            if(o.type === 'sign' && this.action !== 'crouch') hit = true;
+
+                            if(hit) {
+                                window.Gfx.shake(20);
+                                window.Sfx.crash();
+                                window.System.gameOver(this.sc);
+                            } else if(!o.passed) {
+                                // Sucesso (Desviou)
+                                this.sc += 100;
+                                window.Sfx.play(600, 'sine', 0.1, 0.05); // Som "bip" positivo
+                                o.passed = true; // Marca como passado para não pontuar 2x
+                            }
+                        }
                     }
                 }
             });
 
             // =================================================================
-            // 4. PERSONAGEM (ESCALA CORRIGIDA)
+            // 4. PERSONAGEM (OTTO ESTILO MARIO)
             // =================================================================
             
-            // Posição ajustada: Mais longe da câmera (mais alto na tela) para não bater na UI
-            // Lane spread visual reduzido para ele não sair da pista
-            let charX = cx + (this.lane * w * 0.25); 
-            
-            // Y Base: 75% da altura da tela (antes era 80-85%)
-            // Isso tira os pés da frente do slider de sensibilidade
-            let charY = h * 0.75; 
-            
-            if(this.action === 'jump') charY -= h * 0.12; 
-            if(this.action === 'crouch') charY += h * 0.05; 
+            // Posição Base
+            // X: Centro + (Lane * Largura proporcional da pista na base)
+            const charX = cx + (this.lane * (w * 0.25)); 
+            let charY = h * 0.80; // Pés no chão (80% da tela)
 
-            // Sombra
-            ctx.fillStyle = 'rgba(0,0,0,0.4)';
-            ctx.beginPath(); ctx.ellipse(charX, h*0.75 + (h*0.03), w*0.08, w*0.02, 0, 0, Math.PI*2); ctx.fill();
+            // Modificador de Altura pela Ação
+            if(this.action === 'jump') charY -= h * 0.15; // Sobe
+            if(this.action === 'crouch') charY += h * 0.05; // Desce um pouco (agachado)
 
-            // ESCALA REDUZIDA: w * 0.0045 (era 0.006)
-            // Isso resolve o problema da cabeça bater no texto "LARGADA"
-            const s = w * 0.0045;
-            
+            // Sombra do Personagem (Sempre no chão)
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.beginPath();
+            // A sombra fica fixa no chão (h*0.80 + offset), não sobe com o pulo
+            // Mas diminui se ele pular
+            const shadowSize = (this.action === 'jump') ? w * 0.06 : w * 0.08;
+            ctx.ellipse(charX, h * 0.83, shadowSize, shadowSize * 0.3, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            // Desenho do Boneco
+            const s = w * 0.005; // Escala global do boneco
             ctx.save();
             ctx.translate(charX, charY);
             ctx.scale(s, s);
 
-            ctx.strokeStyle = '#222'; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-            const cycle = Math.sin(this.f * 0.4) * 20;
+            // Estilo do traço
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = 14;
+            ctx.strokeStyle = '#333'; // Cor do corpo (cinza escuro/preto)
+
+            const cycle = Math.sin(this.f * 0.5) * 25; // Ciclo de animação (corrida)
 
             ctx.beginPath();
-            
+
             if(this.action === 'jump') {
-                // Salto (Perna estilo barreira)
-                ctx.moveTo(0, -50); ctx.lineTo(-40, -30); 
-                ctx.moveTo(0, -50); ctx.lineTo(40, -10); ctx.lineTo(60, 20); 
-                // Braços
-                ctx.moveTo(0, -90); ctx.lineTo(-30, -130);
-                ctx.moveTo(0, -90); ctx.lineTo(30, -130);
+                // POSE: PULO (Mario Jump)
+                // Perna Dir levantada
+                ctx.moveTo(0, -50); ctx.lineTo(30, -20); ctx.lineTo(40, 10);
+                // Perna Esq esticada pra trás
+                ctx.moveTo(0, -50); ctx.lineTo(-20, -10); ctx.lineTo(-30, 30);
+                // Braço Dir pra cima (Punho pro alto)
+                ctx.moveTo(0, -90); ctx.lineTo(20, -140); 
+                // Braço Esq pra baixo
+                ctx.moveTo(0, -90); ctx.lineTo(-20, -60);
             } 
-            else if(this.action === 'crouch') {
-                // Agachado compacto
-                ctx.moveTo(0, -20); ctx.lineTo(-20, 20); ctx.lineTo(-30, 40);
-                ctx.moveTo(0, -20); ctx.lineTo(20, 20); ctx.lineTo(30, 40);
-                ctx.moveTo(0, -20); ctx.lineTo(0, -60); // Tronco curto
-                ctx.moveTo(0, -60); ctx.lineTo(-25, -30); // Braços
-                ctx.moveTo(0, -60); ctx.lineTo(25, -30);
+            else if (this.action === 'crouch') {
+                // POSE: AGACHADO (Bolinha)
+                // Tronco curto
+                ctx.moveTo(0, -30); ctx.lineTo(0, -70);
+                // Pernas dobradas
+                ctx.moveTo(0, -30); ctx.lineTo(-30, 0); ctx.lineTo(-40, 20);
+                ctx.moveTo(0, -30); ctx.lineTo(30, 0); ctx.lineTo(40, 20);
+                // Braços guardados
+                ctx.moveTo(0, -70); ctx.lineTo(-25, -40);
+                ctx.moveTo(0, -70); ctx.lineTo(25, -40);
+                // Cabeça mais baixa
+                ctx.translate(0, 30); 
             }
             else {
-                // Corrida (Tronco inclinado pra frente para dar velocidade)
-                ctx.moveTo(0, -40); ctx.lineTo(10, -100); // Tronco inclinado
+                // POSE: CORRIDA (Running)
+                // Tronco inclinado pra frente
+                ctx.moveTo(0, -40); ctx.lineTo(15, -100); 
                 
-                // Pernas
-                ctx.moveTo(0, -40); ctx.lineTo(-20 + cycle, 20); ctx.lineTo(-30 + cycle, 60);
-                ctx.moveTo(0, -40); ctx.lineTo(20 - cycle, 20); ctx.lineTo(30 - cycle, 60);
-                
-                // Braços
-                const shoulderX = 10; // Ombros alinhados com tronco inclinado
+                // Pernas (Alternando)
+                ctx.moveTo(0, -40); ctx.lineTo(-20 + cycle, 10); ctx.lineTo(-30 + cycle, 50);
+                ctx.moveTo(0, -40); ctx.lineTo(20 - cycle, 10); ctx.lineTo(30 - cycle, 50);
+
+                // Braços (Opostos às pernas)
+                const shoulderX = 15;
                 const shoulderY = -90;
                 ctx.moveTo(shoulderX, shoulderY); ctx.lineTo(shoulderX - 30 - cycle, shoulderY + 40);
                 ctx.moveTo(shoulderX, shoulderY); ctx.lineTo(shoulderX + 30 + cycle, shoulderY + 40);
-                
-                // Cabeça (Acompanha inclinação)
-                ctx.translate(15, -5); 
             }
             ctx.stroke();
 
-            // Cabeça
-            const headY = (this.action === 'crouch') ? -80 : -120;
-            ctx.fillStyle = '#ffccaa'; 
-            ctx.beginPath(); ctx.arc(0, headY, 18, 0, Math.PI*2); ctx.fill();
-            // Bandana
-            ctx.strokeStyle = '#ff0000'; ctx.lineWidth=5; 
-            ctx.beginPath(); ctx.moveTo(-16, headY-5); ctx.lineTo(16, headY-5); ctx.stroke();
-            // Faixa solta da bandana (animada)
-            ctx.strokeStyle = '#ff0000'; ctx.lineWidth=3;
-            ctx.beginPath(); ctx.moveTo(-16, headY-5); 
-            ctx.quadraticCurveTo(-30 - Math.abs(cycle), headY, -40 - Math.abs(cycle), headY + 10);
+            // CABEÇA E BANDANA
+            // Posição da cabeça (topo do tronco)
+            const headY = (this.action === 'crouch') ? -100 : -130;
+            const headX = (this.action === 'run') ? 20 : 0; // Cabeça pra frente se correndo
+
+            // Rosto
+            ctx.fillStyle = '#ffccaa'; // Pele
+            ctx.beginPath(); ctx.arc(headX, headY, 22, 0, Math.PI*2); ctx.fill();
+            
+            // Bandana Vermelha (Animada ao vento)
+            ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 6;
+            ctx.beginPath(); 
+            ctx.moveTo(headX - 20, headY - 8); ctx.lineTo(headX + 20, headY - 8); 
+            ctx.stroke();
+            
+            // Cauda da bandana
+            const wind = Math.sin(this.f * 0.8) * 10;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(headX - 20, headY - 8);
+            ctx.quadraticCurveTo(headX - 40, headY - 10 + wind, headX - 60, headY + 5 + wind);
             ctx.stroke();
 
             ctx.restore();
+
+            // =================================================================
+            // 5. HUD E FEEDBACK
+            // =================================================================
             
-            // HUD AÇÃO (Ajustado para não cobrir o boneco)
+            // Texto de Ação acima do personagem
             if(this.state === 'play') {
-                ctx.font = "bold 20px Arial"; ctx.textAlign = "center";
-                // Texto um pouco mais alto
-                if(this.action === 'jump') { ctx.fillStyle = "#00aa00"; ctx.fillText("PULO!", charX, charY - (h*0.15)); }
-                else if(this.action === 'crouch') { ctx.fillStyle = "#ddaa00"; ctx.fillText("AGACHADO", charX, charY - (h*0.12)); }
+                ctx.font = "bold 24px 'Chakra Petch'"; ctx.textAlign = "center";
+                ctx.shadowColor = "black"; ctx.shadowBlur = 4;
+                
+                if(this.action === 'jump') { 
+                    ctx.fillStyle = "#00ff00"; 
+                    ctx.fillText("PULO!", charX, charY - (h*0.22)); 
+                } else if(this.action === 'crouch') { 
+                    ctx.fillStyle = "#ffff00"; 
+                    ctx.fillText("AGACHADO", charX, charY - (h*0.22)); 
+                }
+                
+                ctx.shadowBlur = 0;
             }
 
-            return this.sc;
+            return this.sc; // Retorna Score para o Core System atualizar o HUD principal
         }
     };
 
+    // Registro no Core System
     const regLoop = setInterval(() => {
         if(window.System && window.System.registerGame) {
             window.System.registerGame('run', 'Otto Olympics', '🏃', Logic, {camOpacity: 0.3, showWheel: false});
             clearInterval(regLoop);
         }
     }, 100);
+
 })();
