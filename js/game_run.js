@@ -1,5 +1,5 @@
 // =============================================================================
-// LÓGICA DO JOGO: OTTO SUPER RUN (NINTENDO STYLE REMASTER)
+// LÓGICA DO JOGO: OTTO SUPER RUN (NINTENDO STYLE - BACK VIEW)
 // ARQUITETO: THIAGUINHO WII (CODE 177)
 // =============================================================================
 
@@ -360,7 +360,7 @@
             });
 
             // =================================================================
-            // 5. PERSONAGEM (ESTILO PLUMBER BOY - NINTENDO VIBE)
+            // 5. PERSONAGEM (ESTILO PLUMBER BOY - VISÃO TRASEIRA)
             // =================================================================
             
             const charX = cx + this.currentLaneX;
@@ -458,18 +458,18 @@
 
             // Variáveis de animação
             const cycle = Math.sin(this.f * 0.4) * 20;
-            const jumpOffset = this.action === 'jump' ? -10 : 0;
             
             // CORES DO PERSONAGEM (Estilo Plumber)
             const C_SKIN = '#ffccaa';
             const C_SHIRT = '#ff0000'; // Vermelho Mario
             const C_OVERALL = '#0000ff'; // Azul
-            const C_BUTTON = '#ffff00';
+            const C_HAIR = '#4a3222'; // Castanho escuro
             const C_BOOT = '#654321';
             const C_GLOVE = '#ffffff';
 
             // --- 1. PERNAS (Banhadas, curtas e grossas) ---
             ctx.fillStyle = C_OVERALL;
+            // Para desenhar de costas, a ordem não muda muito, mas os pés podem mostrar sola
             if(this.action === 'run') {
                 // Perna Esq
                 this.drawLimb(ctx, -15, 0, 14, 30, cycle);
@@ -484,20 +484,29 @@
                 this.drawLimb(ctx, 20, -5, 14, 20, 40);
             }
 
-            // --- 2. BOTAS ---
-            ctx.fillStyle = C_BOOT;
+            // --- 2. BOTAS (Visão Traseira - Calcanhar/Sola) ---
+            const drawBootBack = (bx, by, lift) => {
+                ctx.fillStyle = C_BOOT;
+                this.drawOval(ctx, bx, by, 16, 12); // Base da bota
+                if(lift > 5) {
+                    // Se o pé está levantado correndo, mostra a sola cinza escura
+                    ctx.fillStyle = '#333';
+                    this.drawOval(ctx, bx, by+2, 14, 10);
+                }
+            };
+
             if(this.action === 'run') {
-                this.drawOval(ctx, -15 + (cycle*0.8), 30 - (Math.abs(cycle)*0.2), 16, 12);
-                this.drawOval(ctx, 15 - (cycle*0.8), 30 - (Math.abs(cycle)*0.2), 16, 12);
+                drawBootBack(-15 + (cycle*0.8), 30 - (Math.abs(cycle)*0.2), cycle);
+                drawBootBack(15 - (cycle*0.8), 30 - (Math.abs(cycle)*0.2), -cycle);
             } else if (this.action === 'jump') {
-                this.drawOval(ctx, -18, 15, 16, 12); // Esq cima
-                this.drawOval(ctx, 18, 40, 16, 12);  // Dir baixo
+                drawBootBack(-18, 15, 10); 
+                drawBootBack(18, 40, 0);  
             } else {
-                this.drawOval(ctx, -25, 15, 16, 12);
-                this.drawOval(ctx, 25, 15, 16, 12);
+                drawBootBack(-25, 15, 0);
+                drawBootBack(25, 15, 0);
             }
 
-            // --- 3. CORPO (Gordinho) ---
+            // --- 3. CORPO (Costas) ---
             const bodyH = this.action === 'crouch' ? 35 : 45;
             const bodyY = this.action === 'crouch' ? -20 : -40;
             
@@ -505,81 +514,85 @@
             ctx.fillStyle = C_SHIRT;
             ctx.beginPath(); ctx.arc(0, bodyY, 28, 0, Math.PI*2); ctx.fill();
             
-            // Macacão Azul
+            // Macacão Azul (Costas - Mais alto, sem botões, alças cruzadas)
             ctx.fillStyle = C_OVERALL;
             ctx.fillRect(-20, bodyY, 40, 30);
             ctx.beginPath(); ctx.arc(0, bodyY+30, 21, 0, Math.PI, false); ctx.fill(); // Fundo arredondado
+            
+            // Alças cruzadas nas costas (Simulação simples)
+            ctx.fillStyle = C_OVERALL; 
+            // Alça Esq indo pra Dir
+            ctx.beginPath(); ctx.moveTo(-15, bodyY-15); ctx.lineTo(15, bodyY+15); ctx.lineTo(5, bodyY+15); ctx.lineTo(-25, bodyY-15); ctx.fill();
+            // Alça Dir indo pra Esq
+            ctx.beginPath(); ctx.moveTo(15, bodyY-15); ctx.lineTo(-15, bodyY+15); ctx.lineTo(-5, bodyY+15); ctx.lineTo(25, bodyY-15); ctx.fill();
 
-            // Botões Amarelos
-            ctx.fillStyle = C_BUTTON;
-            ctx.beginPath(); ctx.arc(-10, bodyY+5, 4, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(10, bodyY+5, 4, 0, Math.PI*2); ctx.fill();
-
-            // --- 4. BRAÇOS (Curtos) ---
+            // --- 4. BRAÇOS (Vistos de trás - Cotovelos) ---
             ctx.fillStyle = C_SHIRT;
             const armY = bodyY - 5;
+            // A lógica de balanço é a mesma, mas desenhamos "por cima" do corpo se estiverem para trás
             if(this.action === 'jump') {
                 // Braço Soco pra Cima
                 ctx.beginPath(); ctx.ellipse(25, armY-20, 10, 20, -0.5, 0, Math.PI*2); ctx.fill(); // Dir
                 ctx.beginPath(); ctx.ellipse(-25, armY+10, 10, 15, 0.5, 0, Math.PI*2); ctx.fill(); // Esq
                 // Luvas
                 ctx.fillStyle = C_GLOVE;
-                ctx.beginPath(); ctx.arc(32, armY-35, 12, 0, Math.PI*2); ctx.fill(); // Punho Cima
-                ctx.beginPath(); ctx.arc(-30, armY+20, 10, 0, Math.PI*2); ctx.fill(); // Mão Baixo
+                ctx.beginPath(); ctx.arc(32, armY-35, 12, 0, Math.PI*2); ctx.fill(); 
+                ctx.beginPath(); ctx.arc(-30, armY+20, 10, 0, Math.PI*2); ctx.fill(); 
             } 
             else {
-                // Correndo (Balança oposto às pernas)
+                // Correndo 
                 const armSwing = this.action === 'run' ? -cycle : 0;
                 // Esq
                 ctx.beginPath(); ctx.ellipse(-28 + (armSwing*0.5), armY + 10, 10, 18, 0.5 + (armSwing*0.02), 0, Math.PI*2); ctx.fill();
                 // Dir
                 ctx.beginPath(); ctx.ellipse(28 - (armSwing*0.5), armY + 10, 10, 18, -0.5 - (armSwing*0.02), 0, Math.PI*2); ctx.fill();
                 
-                // Luvas
+                // Luvas (Dorso da mão)
                 ctx.fillStyle = C_GLOVE;
                 ctx.beginPath(); ctx.arc(-32 + (armSwing*0.8), armY+25, 10, 0, Math.PI*2); ctx.fill();
                 ctx.beginPath(); ctx.arc(32 - (armSwing*0.8), armY+25, 10, 0, Math.PI*2); ctx.fill();
             }
 
-            // --- 5. CABEÇA (Grande e Redonda) ---
+            // --- 5. CABEÇA (Nuca) ---
             const headY = bodyY - 25;
             
-            // Rosto
+            // Pele
             ctx.fillStyle = C_SKIN;
             ctx.beginPath(); ctx.arc(0, headY, 26, 0, Math.PI*2); ctx.fill();
             
-            // Nariz (Batata)
-            ctx.beginPath(); ctx.ellipse(0, headY+5, 8, 6, 0, 0, Math.PI*2); ctx.fill();
-
-            // Bigode (Preto e Grosso)
-            ctx.fillStyle = '#000';
-            ctx.beginPath();
-            ctx.moveTo(-12, headY+12);
-            ctx.quadraticCurveTo(0, headY+8, 12, headY+12); // Cima
-            ctx.quadraticCurveTo(14, headY+16, 0, headY+18); // Baixo
-            ctx.quadraticCurveTo(-14, headY+16, -12, headY+12);
+            // Cabelo (Parte de trás da cabeça)
+            ctx.fillStyle = C_HAIR;
+            ctx.beginPath(); 
+            ctx.arc(0, headY, 26, 0, Math.PI, false); // Meia lua inferior
             ctx.fill();
+            // Recorte do pescoço
+            ctx.fillStyle = C_SKIN;
+            ctx.beginPath(); ctx.ellipse(0, headY+15, 10, 8, 0, 0, Math.PI*2); ctx.fill();
 
-            // Olhos (Ovais Pretos)
-            ctx.beginPath(); ctx.ellipse(-8, headY-4, 4, 7, 0, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.ellipse(8, headY-4, 4, 7, 0, 0, Math.PI*2); ctx.fill();
-            // Brilho dos olhos
-            ctx.fillStyle = '#fff';
-            ctx.beginPath(); ctx.arc(-7, headY-7, 2, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(9, headY-7, 2, 0, Math.PI*2); ctx.fill();
+            // Bandana (Nó visível na nuca)
+            const wind = Math.sin(this.f * 0.8) * 12;
+            
+            // Pontas da bandana voando "para a tela" (pois o vento vem de frente na corrida)
+            ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(0, headY+10);
+            ctx.quadraticCurveTo(20, headY+10+(wind*0.5), 30, headY+20+wind); // Ponta Dir
+            ctx.moveTo(0, headY+10);
+            ctx.quadraticCurveTo(-20, headY+10+(wind*0.5), -30, headY+20+wind); // Ponta Esq
+            ctx.stroke();
 
-            // --- 6. BONÉ (Vermelho com Aba) ---
+            // Nó central
+            ctx.fillStyle = '#ff0000';
+            ctx.beginPath(); ctx.arc(0, headY+10, 6, 0, Math.PI*2); ctx.fill();
+
+            // --- 6. BONÉ (Visão Traseira) ---
             ctx.fillStyle = C_SHIRT; // Vermelho
-            // Cúpula
-            ctx.beginPath(); ctx.arc(0, headY-8, 26, Math.PI, 0); ctx.fill();
-            // Aba
-            ctx.fillRect(-28, headY-12, 56, 8);
-            // Símbolo "M" (opcional, branco)
-            ctx.fillStyle = '#fff';
-            ctx.beginPath(); ctx.arc(0, headY-15, 8, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = 'red';
-            ctx.font = "bold 10px Arial"; ctx.textAlign="center"; 
-            ctx.fillText("M", 0, headY-12);
+            // Cúpula (Cobre o topo da cabeça)
+            ctx.beginPath(); ctx.arc(0, headY-5, 27, Math.PI, 0); ctx.fill();
+            // Aba (Não visível ou apenas uma linha fina no topo se ele estiver olhando pra frente)
+            // Vamos desenhar um detalhe no topo para simular a profundidade da aba indo pra longe
+            ctx.fillStyle = '#cc0000'; // Vermelho mais escuro
+            ctx.beginPath(); ctx.ellipse(0, headY-30, 20, 3, 0, Math.PI, 0); ctx.fill();
 
             ctx.restore();
 
