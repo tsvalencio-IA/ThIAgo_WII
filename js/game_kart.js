@@ -1,4 +1,4 @@
-// LÓGICA DO JOGO: KART DO OTTO (CIRCUITO FIXO - RIVAL & NITRO EDITION)
+// LÓGICA DO JOGO: KART DO OTTO (FINAL EDITION - CINEMATIC)
 (function() {
     // Sistema de partículas e Elementos DOM
     let particles = [];
@@ -20,18 +20,18 @@
         playerX: 0,       
         steer: 0,         
         
-        // --- RIVAL SYSTEM (ETAPA 4) ---
+        // --- RIVAL SYSTEM ---
         rival: {
-            pos: 1000,    // Começa um pouco a frente
+            pos: 1000,
             x: 0.5,
             speed: 0,
             lap: 1,
             finished: false,
-            drift: 0
+            aggressive: false
         },
         
-        // --- NITRO SYSTEM (ETAPA 4) ---
-        nitro: 0,         // 0 a 100
+        // --- NITRO SYSTEM ---
+        nitro: 0,
         maxNitro: 100,
         isNitroActive: false,
         
@@ -41,6 +41,11 @@
         driftCharge: 0,   
         mtStage: 0,       
         boostTimer: 0,    
+        
+        // --- GAME STATES (ETAPA 5) ---
+        state: 'race', // 'race', 'finished'
+        finishTimer: 0,
+        isLastLap: false,
         
         // --- FÍSICA DE CORRIDA ---
         centrifugal: 0,   
@@ -52,11 +57,18 @@
         lap: 1,
         totalLaps: 3,
         time: 0,
-        finished: false,
+        
+        // --- ESTATÍSTICAS FINAIS ---
+        stats: {
+            drifts: 0,
+            overtakes: 0,
+            crashes: 0
+        },
         
         // --- VISUAL ---
         visualTilt: 0,    
         bounce: 0,
+        skyColor: 0, // 0=Blue, 1=Sunset (Last Lap)
         
         // --- INPUT ---
         inputState: 0,
@@ -107,10 +119,7 @@
         },
         
         setupUI: function() {
-            // Remove botão antigo se existir
             if(document.getElementById('nitro-btn')) document.getElementById('nitro-btn').remove();
-
-            // Cria Botão Nitro
             nitroBtn = document.createElement('div');
             nitroBtn.id = 'nitro-btn';
             nitroBtn.innerHTML = "NITRO";
@@ -119,10 +128,9 @@
                 borderRadius: '50%', background: 'radial-gradient(#ffaa00, #cc5500)', border: '4px solid #fff',
                 color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontFamily: "'Russo One', sans-serif", fontSize: '18px', cursor: 'pointer',
-                boxShadow: '0 0 20px rgba(255, 100, 0, 0.5)', zIndex: '100', userSelect: 'none'
+                boxShadow: '0 0 20px rgba(255, 100, 0, 0.5)', zIndex: '100', userSelect: 'none', transition: 'all 0.1s'
             });
 
-            // Eventos Touch/Mouse
             const activate = (e) => { e.preventDefault(); this.isNitroActive = true; nitroBtn.style.transform = 'scale(0.9)'; };
             const deactivate = (e) => { e.preventDefault(); this.isNitroActive = false; nitroBtn.style.transform = 'scale(1.0)'; };
             
@@ -130,8 +138,6 @@
             nitroBtn.addEventListener('touchstart', activate);
             nitroBtn.addEventListener('mouseup', deactivate);
             nitroBtn.addEventListener('touchend', deactivate);
-            nitroBtn.addEventListener('mouseleave', deactivate);
-
             document.getElementById('game-ui').appendChild(nitroBtn);
         },
 
@@ -141,15 +147,17 @@
             
             // Resets
             this.speed = 0; this.pos = 0; this.playerX = 0; this.steer = 0;
-            this.health = 100; this.score = 0; this.lap = 1; this.time = 0; this.finished = false;
+            this.health = 100; this.score = 0; this.lap = 1; this.time = 0; 
+            this.state = 'race'; this.finishTimer = 0; this.isLastLap = false; this.skyColor = 0;
             particles = []; this.inputState = 0;
+            this.stats = { drifts: 0, overtakes: 0, crashes: 0 };
             
             // Drift & Nitro
             this.driftState = 0; this.driftCharge = 0; this.mtStage = 0; this.boostTimer = 0; this.grip = 1.0;
-            this.nitro = 50; // Começa com metade
+            this.nitro = 50; 
 
             // Rival Reset
-            this.rival.pos = 1000; this.rival.x = 0.5; this.rival.speed = 0; this.rival.lap = 1;
+            this.rival.pos = 1000; this.rival.x = 0.5; this.rival.speed = 0; this.rival.lap = 1; this.rival.finished = false;
             
             // Som
             window.System.msg("LIGAR MOTORES"); 
@@ -162,18 +170,16 @@
         
         update: function(ctx, w, h, pose) {
             const d = Logic; 
-            if(d.finished) return;
-
             const cx = w / 2;
             const horizon = h * 0.40;
 
             // =================================================================
-            // 1. INPUT & CONTROLES
+            // 1. INPUT (Somente se não acabou)
             // =================================================================
             d.inputState = 0;
             let targetAngle = 0;
 
-            if(pose) {
+            if(d.state === 'race' && pose) {
                 const kp = pose.keypoints;
                 const lw = kp.find(k=>k.name==='left_wrist');
                 const rw = kp.find(k=>k.name==='right_wrist');
@@ -201,7 +207,7 @@
                     // Lógica Nitro
                     if(d.isNitroActive && d.nitro > 0) {
                         topSpeed += 100;
-                        d.nitro -= 1; // Consumo
+                        d.nitro -= 1; 
                         if(Math.random() > 0.5) particles.push({x:cx, y:h*0.85, vx:(Math.random()-0.5)*10, vy:10, c:'#ffaa00', l:10, s:10});
                         window.Gfx.shake(2);
                     }
@@ -212,7 +218,17 @@
                 } else {
                     d.wheel.opacity *= 0.8; d.speed *= 0.98; targetAngle = 0;
                 }
+            } else if (d.state === 'finished') {
+                // Autopilot de parada
+                d.speed *= 0.96;
+                targetAngle = 0;
+                d.isNitroActive = false;
+                if(d.speed < 2 && d.finishTimer === 0) {
+                    d.finishTimer = 1; // Start results sequence
+                    setTimeout(() => window.System.gameOver(d.score), 2000); // Trigger UI
+                }
             }
+
             d.steer += (targetAngle - d.steer) * 0.10;
             d.steer = Math.max(-1.5, Math.min(1.5, d.steer));
             if(d.boostTimer > 0) d.boostTimer--;
@@ -221,37 +237,53 @@
             if(document.getElementById('visual-wheel')) document.getElementById('visual-wheel').style.opacity = '0'; 
 
             // =================================================================
-            // 2. IA RIVAL (RUBBER BAND)
+            // 2. IA RIVAL (COM ULTRAPASSAGEM)
             // =================================================================
-            // Avança o Rival
-            let rivalSegIdx = Math.floor(d.rival.pos / SEGMENT_LENGTH) % segments.length;
-            let rivalSeg = segments[rivalSegIdx];
-            
-            // IA Velocidade (Elástico)
-            let distToPlayer = d.rival.pos - d.pos;
-            // Corrige wrap-around do circuito
-            if(distToPlayer > trackLength/2) distToPlayer -= trackLength;
-            if(distToPlayer < -trackLength/2) distToPlayer += trackLength;
+            if(!d.rival.finished) {
+                let prevRivalPos = d.rival.pos;
+                let rivalSegIdx = Math.floor(d.rival.pos / SEGMENT_LENGTH) % segments.length;
+                let rivalSeg = segments[rivalSegIdx];
+                
+                // IA Velocidade
+                let distToPlayer = d.rival.pos - d.pos;
+                if(distToPlayer > trackLength/2) distToPlayer -= trackLength;
+                if(distToPlayer < -trackLength/2) distToPlayer += trackLength;
 
-            let targetRivalSpeed = d.maxSpeed * 0.98;
-            if(distToPlayer < -500) targetRivalSpeed = d.maxSpeed * 1.15; // Player fugiu -> Acelera muito
-            else if (distToPlayer > 500) targetRivalSpeed = d.maxSpeed * 0.85; // Player para trás -> Espera
-            
-            d.rival.speed += (targetRivalSpeed - d.rival.speed) * 0.05;
-            d.rival.pos += d.rival.speed;
-            
-            // Loop Pista Rival
-            while(d.rival.pos >= trackLength) { d.rival.pos -= trackLength; d.rival.lap++; }
+                let targetRivalSpeed = d.maxSpeed * (d.isLastLap ? 1.05 : 0.98); // Mais rápido no final
+                if(distToPlayer < -500) targetRivalSpeed *= 1.15; 
+                else if (distToPlayer > 500) targetRivalSpeed *= 0.85; 
+                
+                d.rival.speed += (targetRivalSpeed - d.rival.speed) * 0.05;
+                d.rival.pos += d.rival.speed;
+                while(d.rival.pos >= trackLength) { d.rival.pos -= trackLength; d.rival.lap++; }
+                if(d.rival.lap > d.totalLaps) d.rival.finished = true;
 
-            // IA Direção (Segue a curva com atraso)
-            let rivalTargetX = -rivalSeg.curve * 0.4; // Tenta fazer tangência
-            // Erra se curva for difícil
-            if(Math.abs(rivalSeg.curve) > 2.0 && Math.random() < 0.02) rivalTargetX = rivalSeg.curve * 1.5; // Erro!
-            d.rival.x += (rivalTargetX - d.rival.x) * 0.05;
+                // IA Direção
+                let rivalTargetX = -rivalSeg.curve * 0.4; 
+                if(!d.isLastLap && Math.abs(rivalSeg.curve) > 2.0 && Math.random() < 0.02) rivalTargetX = rivalSeg.curve * 1.5; 
+                d.rival.x += (rivalTargetX - d.rival.x) * 0.05;
 
-            // Ultrapassagem (Score)
-            if(d.rival.pos > d.pos && d.rival.pos < d.pos + 100) {
-                 // Rival acabou de passar?
+                // DETECÇÃO DE ULTRAPASSAGEM (PLAYER PASSOU RIVAL)
+                // Se player estava atrás antes e agora está na frente (considerando volta)
+                // Simplificação: Verifica distToPlayer cruzando zero
+                let newDist = d.rival.pos - d.pos;
+                if(newDist > trackLength/2) newDist -= trackLength;
+                if(newDist < -trackLength/2) newDist += trackLength;
+                
+                // Se o rival estava na frente (dist > 0) e agora está atrás (dist < 0) e distância é pequena
+                // Isso precisa de persistência de estado anterior do frame, mas vamos usar um check de proximidade
+                if(Math.abs(newDist) < 200 && newDist < 0 && d.speed > d.rival.speed && d.state === 'race') {
+                     // Check if logic repeats instantly (debounce needed, simplified here by checking if overtake already flagged recently)
+                     // Vamos usar um cooldown visual
+                }
+                
+                // Hack simples: Se rival está muito perto atrás (< 300) e player rápido, solta confete
+                if(newDist < 0 && newDist > -300 && d.speed > d.rival.speed + 10 && Math.random() < 0.05) {
+                    window.System.msg("ULTRAPASSAGEM!");
+                    d.score += 10;
+                    d.stats.overtakes++;
+                    d.nitro = Math.min(100, d.nitro + 20);
+                }
             }
 
             // =================================================================
@@ -259,9 +291,35 @@
             // =================================================================
             d.pos += d.speed;
             while(d.pos >= trackLength) {
-                d.pos -= trackLength; d.lap++;
-                if(d.lap > d.totalLaps) { d.finished = true; window.System.gameOver("FIM! SCORE: " + d.score); } 
-                else { window.System.msg("VOLTA " + d.lap); window.Sfx.coin(); }
+                d.pos -= trackLength; 
+                if(d.state === 'race') {
+                    d.lap++;
+                    if(d.lap > d.totalLaps) { 
+                        // CRUZOU A LINHA DE CHEGADA
+                        d.state = 'finished';
+                        d.finished = true; // Flag legacy
+                        
+                        // Resultado
+                        let resultMsg = "VENCEDOR!";
+                        if(d.rival.finished) resultMsg = "2º LUGAR";
+                        else d.score += 5000; // Bônus Vitória
+                        
+                        // Explosão de Partículas
+                        for(let i=0;i<50;i++) particles.push({x:cx, y:h/2, vx:(Math.random()-0.5)*20, vy:(Math.random()-0.5)*20, c:Math.random()<0.5?'#fff':'#ffcc00', l:60, s:8});
+                        window.System.msg(resultMsg);
+                        window.Sfx.play(1000, 'square', 0.5, 0.5); // Fanfare
+                    } else { 
+                        if(d.lap === d.totalLaps) {
+                            d.isLastLap = true;
+                            d.skyColor = 1; // Sunset
+                            window.System.msg("ÚLTIMA VOLTA!");
+                            window.Sfx.play(800, 'sawtooth', 0.5, 0.4);
+                        } else {
+                            window.System.msg("VOLTA " + d.lap); 
+                            window.Sfx.coin();
+                        }
+                    }
+                }
             }
             while(d.pos < 0) d.pos += trackLength;
 
@@ -280,7 +338,8 @@
                     if(d.mtStage > 0) {
                         let boost = d.mtStage === 2 ? 50 : 30;
                         d.speed += boost; d.boostTimer = d.mtStage === 2 ? 80 : 40;
-                        d.nitro = Math.min(100, d.nitro + (d.mtStage*10)); // Recarrega Nitro
+                        d.nitro = Math.min(100, d.nitro + (d.mtStage*10)); 
+                        d.stats.drifts++;
                         window.System.msg("TURBO!"); window.Sfx.play(600, 'square', 0.2, 0.1);
                     }
                     d.driftState = 0; 
@@ -320,12 +379,18 @@
             // 4. RENDERIZAÇÃO
             // =================================================================
             const bgOffset = (currentSeg.curve * 100) + (d.steer * 50);
+            
+            // Sky Logic (Blue -> Sunset)
+            let topSky = "#00aaff"; let botSky = "#cceeff";
+            if(d.skyColor === 1) { topSky = "#663399"; botSky = "#ffaa00"; } // Sunset colors
+            
             const gradSky = ctx.createLinearGradient(0, 0, 0, horizon);
-            gradSky.addColorStop(0, "#00aaff"); gradSky.addColorStop(1, "#cceeff");
+            gradSky.addColorStop(0, topSky); gradSky.addColorStop(1, botSky);
             ctx.fillStyle = gradSky; ctx.fillRect(0, 0, w, horizon);
 
             // Montanhas
-            ctx.fillStyle = '#65a65a'; ctx.beginPath(); ctx.moveTo(0, horizon);
+            ctx.fillStyle = d.skyColor === 1 ? '#442244' : '#65a65a'; // Montanhas escuras no sunset
+            ctx.beginPath(); ctx.moveTo(0, horizon);
             for(let i=0; i<=10; i++) ctx.lineTo((w/10 * i) - (bgOffset * 0.2), horizon - 30 - Math.sin(i + d.pos*0.001)*20);
             ctx.lineTo(w, horizon); ctx.fill();
 
@@ -348,13 +413,13 @@
                 const screenXNext = cx - (camX * scaleNext) - ((dx + seg.curve*0.5) * (z+20) * scaleNext * 2);
                 const roadWidth = (w * 3) * scale; const roadWidthNext = (w * 3) * scaleNext;
                 
-                segmentCoords.push({ x: screenX, y: screenY, scale: scale, index: segIdx, z: z, curveDX: dx }); // Guarda curveDX para projetar objetos
+                segmentCoords.push({ x: screenX, y: screenY, scale: scale, index: segIdx, z: z, curveDX: dx }); 
 
-                ctx.fillStyle = (seg.color === 'dark') ? '#5cab40' : '#65bd48'; ctx.fillRect(0, screenYNext, w, screenY - screenYNext); // Grama
-                ctx.fillStyle = (seg.color === 'dark') ? '#cc0000' : '#ffffff'; // Zebra
+                ctx.fillStyle = (seg.color === 'dark') ? '#5cab40' : '#65bd48'; ctx.fillRect(0, screenYNext, w, screenY - screenYNext); 
+                ctx.fillStyle = (seg.color === 'dark') ? '#cc0000' : '#ffffff'; 
                 ctx.beginPath(); ctx.moveTo(screenX - roadWidth/2 - roadWidth*0.1, screenY); ctx.lineTo(screenX + roadWidth/2 + roadWidth*0.1, screenY);
                 ctx.lineTo(screenXNext + roadWidthNext/2 + roadWidthNext*0.1, screenYNext); ctx.lineTo(screenXNext - roadWidthNext/2 - roadWidthNext*0.1, screenYNext); ctx.fill();
-                ctx.fillStyle = (seg.color === 'dark') ? '#666666' : '#636363'; // Asfalto
+                ctx.fillStyle = (seg.color === 'dark') ? '#666666' : '#636363'; 
                 ctx.beginPath(); ctx.moveTo(screenX - roadWidth/2, screenY); ctx.lineTo(screenX + roadWidth/2, screenY);
                 ctx.lineTo(screenXNext + roadWidthNext/2, screenYNext); ctx.lineTo(screenXNext - roadWidthNext/2, screenYNext); ctx.fill();
             }
@@ -364,40 +429,27 @@
                 const coord = segmentCoords[n];
                 const seg = segments[coord.index];
 
-                // Desenhar Rival?
-                // Rival Z relativo = RivalPos - PlayerPos. 
-                // Se Rival está neste segmento (aprox)
+                // Rival
                 let rivalRelPos = d.rival.pos - d.pos;
                 if(rivalRelPos < -trackLength/2) rivalRelPos += trackLength;
                 if(rivalRelPos > trackLength/2) rivalRelPos -= trackLength;
-                
-                // Se rival está dentro deste slice de Z
-                let segZStart = n * SEGMENT_LENGTH; 
-                // A lógica de segmentos aqui é index baseada, então:
-                // Distancia em segmentos
                 let distSegs = (coord.index - currentSegIndex + segments.length) % segments.length;
                 let rivalDistSegs = Math.floor(rivalRelPos / SEGMENT_LENGTH);
                 
-                // Ajuste fino para desenhar o rival no segmento certo
                 if(Math.abs(rivalDistSegs - distSegs) < 1 && rivalRelPos > 0) {
                      const rScale = coord.scale;
-                     // X do Rival projetado na curva
-                     // Posição X da tela = Centro - CamX - CurvaOffset + RivalWorldX
-                     // Rival X precisa ser afetado pela curva acumulada (coord.curveDX)
                      const rScreenX = coord.x + (d.rival.x * (w * 3) * rScale / 2);
                      const rScreenY = coord.y;
-                     
-                     // Desenha Sprite Rival (Verde)
-                     const kSize = (w * 0.0055) / (rScale * 0.05); // Ajuste de escala tosco mas funcional
-                     ctx.save(); ctx.translate(rScreenX, rScreenY); ctx.scale(rScale * 8, rScale * 8); // Scale relativa
+                     const kSize = (w * 0.0055) / (rScale * 0.05); 
+                     ctx.save(); ctx.translate(rScreenX, rScreenY); ctx.scale(rScale * 8, rScale * 8); 
                      ctx.fillStyle = '#00aa00'; ctx.beginPath(); ctx.ellipse(0, -5, 20, 10, 0, 0, Math.PI*2); ctx.fill();
                      ctx.fillStyle = '#111'; ctx.fillRect(-15, -10, 8, 10); ctx.fillRect(7, -10, 8, 10);
-                     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, -20, 8, 0, Math.PI*2); ctx.fill(); // Cabeca
-                     ctx.fillStyle = '#00aa00'; ctx.beginPath(); ctx.arc(0, -22, 8, Math.PI, 0); ctx.fill(); // Boné
+                     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, -20, 8, 0, Math.PI*2); ctx.fill(); 
+                     ctx.fillStyle = '#00aa00'; ctx.beginPath(); ctx.arc(0, -22, 8, Math.PI, 0); ctx.fill(); 
                      ctx.restore();
                 }
 
-                // Desenhar Obstáculos
+                // Obstáculos
                 if(seg.obs.length > 0) {
                     seg.obs.forEach(o => {
                         const spriteScale = coord.scale * 1.5;
@@ -414,11 +466,9 @@
                             ctx.fillStyle = '#000'; ctx.font="bold "+(size*0.5)+"px Arial"; ctx.textAlign="center"; 
                             ctx.fillText(seg.curve < 0 ? "<<<" : ">>>", 0, -size*0.4); ctx.restore();
                         }
-                        // Colisão
                         if(n < 2 && Math.abs(d.playerX - o.x) < 0.5) {
-                            d.speed *= 0.8; d.score -= 50; d.nitro = Math.max(0, d.nitro - 20); // Perde Nitro
-                            window.Gfx.shake(10); window.Sfx.crash(); o.x = 999; 
-                            window.System.msg("DANO!");
+                            d.speed *= 0.8; d.score -= 50; d.nitro = Math.max(0, d.nitro - 20); d.stats.crashes++;
+                            window.Gfx.shake(10); window.Sfx.crash(); o.x = 999; window.System.msg("CRASH!");
                         }
                     });
                 }
@@ -465,37 +515,54 @@
             particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.l--; if(p.l<=0) particles.splice(i,1); else { ctx.fillStyle=p.c; if(p.s) {ctx.beginPath();ctx.arc(p.x,p.y,p.s,0,Math.PI*2);ctx.fill();} else ctx.fillRect(p.x,p.y,4,4); } });
 
             // 6. HUD
-            const hudX = w - 80; const hudY = h - 60;
-            // Velocímetro
-            ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.beginPath(); ctx.arc(hudX, hudY, 55, 0, Math.PI*2); ctx.fill();
-            ctx.lineWidth = 4; ctx.strokeStyle = d.isNitroActive ? '#00ffff' : (d.mtStage > 0 ? '#ffaa00' : '#fff'); ctx.stroke();
-            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = "bold 36px 'Russo One'"; ctx.fillText(Math.floor(d.speed), hudX, hudY + 10);
-            ctx.font = "12px Arial"; ctx.fillText("KM/H", hudX, hudY + 30);
+            if(d.state === 'race') {
+                const hudX = w - 80; const hudY = h - 60;
+                ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.beginPath(); ctx.arc(hudX, hudY, 55, 0, Math.PI*2); ctx.fill();
+                ctx.lineWidth = 4; ctx.strokeStyle = d.isNitroActive ? '#00ffff' : (d.mtStage > 0 ? '#ffaa00' : '#fff'); ctx.stroke();
+                ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = "bold 36px 'Russo One'"; ctx.fillText(Math.floor(d.speed), hudX, hudY + 10);
+                ctx.font = "12px Arial"; ctx.fillText("KM/H", hudX, hudY + 30);
 
-            // Barra de Nitro
-            ctx.fillStyle = '#333'; ctx.fillRect(w - 160, h - 140, 140, 15);
-            ctx.fillStyle = '#00ffff'; ctx.fillRect(w - 158, h - 138, 136 * (d.nitro/100), 11);
-            ctx.font = "10px Arial"; ctx.fillText("NITRO", w - 90, h - 145);
+                ctx.fillStyle = '#333'; ctx.fillRect(w - 160, h - 140, 140, 15);
+                ctx.fillStyle = '#00ffff'; ctx.fillRect(w - 158, h - 138, 136 * (d.nitro/100), 11);
+                ctx.font = "10px Arial"; ctx.fillText("NITRO", w - 90, h - 145);
 
-            // Score e Voltas
-            ctx.fillStyle = '#fff'; ctx.font = "bold 30px 'Russo One'"; ctx.textAlign = "left";
-            ctx.fillText("VOLTA " + d.lap + "/" + d.totalLaps, 20, 50);
-            ctx.font = "20px Arial"; ctx.fillStyle = "#ffff00";
-            ctx.fillText("SCORE: " + d.score, 20, 80);
+                ctx.fillStyle = '#fff'; ctx.font = "bold 30px 'Russo One'"; ctx.textAlign = "left";
+                const lapColor = d.isLastLap ? '#ff3333' : '#fff';
+                ctx.fillStyle = lapColor; ctx.fillText("VOLTA " + d.lap + "/" + d.totalLaps, 20, 50);
+                ctx.font = "20px Arial"; ctx.fillStyle = "#ffff00"; ctx.fillText("SCORE: " + d.score, 20, 80);
 
-            // Aviso Volante
-            if(d.inputState === 1) {
-                ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0, h*0.4, w, h*0.2);
-                ctx.fillStyle = "#fff"; ctx.textAlign="center"; ctx.font="bold 24px Arial"; ctx.fillText("SEGURE O VOLANTE COM AS DUAS MÃOS!", cx, h*0.5);
-            }
+                if(d.inputState === 1) {
+                    ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0, h*0.4, w, h*0.2);
+                    ctx.fillStyle = "#fff"; ctx.textAlign="center"; ctx.font="bold 24px Arial"; ctx.fillText("SEGURE O VOLANTE COM AS DUAS MÃOS!", cx, h*0.5);
+                }
 
-            // Render Volante HUD
-            if(d.inputState === 2 && d.wheel.opacity > 0.05) {
-                ctx.save(); ctx.globalAlpha = d.wheel.opacity * 0.6; ctx.translate(d.wheel.x, d.wheel.y); ctx.rotate(d.wheel.angle);
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(0,0, d.wheel.radius, 0, Math.PI*2); ctx.stroke();
-                ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.arc(0,0, 10, 0, Math.PI*2); ctx.fill();
-                ctx.strokeStyle = '#ff3333'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0, -d.wheel.radius); ctx.stroke();
-                ctx.restore();
+                if(d.inputState === 2 && d.wheel.opacity > 0.05) {
+                    ctx.save(); ctx.globalAlpha = d.wheel.opacity * 0.6; ctx.translate(d.wheel.x, d.wheel.y); ctx.rotate(d.wheel.angle);
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(0,0, d.wheel.radius, 0, Math.PI*2); ctx.stroke();
+                    ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.arc(0,0, 10, 0, Math.PI*2); ctx.fill();
+                    ctx.strokeStyle = '#ff3333'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0, -d.wheel.radius); ctx.stroke();
+                    ctx.restore();
+                }
+            } else {
+                // TELA DE RESULTADOS (OVERLAY)
+                ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0,0,w,h);
+                ctx.fillStyle = "#fff"; ctx.textAlign="center"; 
+                
+                // Título
+                ctx.font="bold 60px 'Russo One'"; 
+                const title = (!d.rival.finished) ? "VITÓRIA!" : "2º LUGAR";
+                const col = (!d.rival.finished) ? "#ffff00" : "#aaaaaa";
+                ctx.fillStyle = col; ctx.fillText(title, cx, h*0.3);
+
+                // Stats
+                ctx.font="bold 30px Arial"; ctx.fillStyle = "#fff";
+                ctx.textAlign = "left"; const startX = cx - 150;
+                ctx.fillText(`PONTOS: ${d.score}`, startX, h*0.45);
+                ctx.font="24px Arial"; ctx.fillStyle = "#ccc";
+                ctx.fillText(`DRIFTS: ${d.stats.drifts}`, startX, h*0.55);
+                ctx.fillText(`ULTRAPASSAGENS: ${d.stats.overtakes}`, startX, h*0.62);
+                ctx.fillStyle = "#ff5555";
+                ctx.fillText(`BATIDAS: ${d.stats.crashes}`, startX, h*0.69);
             }
 
             d.time++;
