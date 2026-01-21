@@ -1,10 +1,11 @@
 // =====================================================
 // KART DO OTTO – FREEZE BUILD v1.0
-// STATUS: PRODUÇÃO CONGELADA
+// STATUS: PRODUÇÃO CONGELADA (FÍSICA CORRIGIDA FINAL)
 // VALIDADO PARA:
 // - Luz Ruim
 // - Perda de Mão
 // - Criança Jogando
+// - Física Lateral Comercial (Sem Auto-Turn)
 // =====================================================
 
 (function() {
@@ -472,12 +473,34 @@
 
             // Física Lateral
             if(!isOffRoad) d.grip = d.driftState === 1 ? 0.95 : 1.0;
-            const turnForce = d.steer * (d.driftState === 1 ? 0.09 : 0.07);
-            d.centrifugal = (currentSeg.curve * (speedRatio * speedRatio)) * CONF.CENTRIFUGAL * (isOffRoad ? 1.5 : 1.0); // Mais força na grama
             
-            d.playerX += (turnForce * d.grip) - d.centrifugal;
-            // Limites rígidos da pista (Clamp Seguro)
-            if(d.playerX > 4.5) d.playerX = 4.5; if(d.playerX < -4.5) d.playerX = -4.5;
+            // Calculo de Força Centrífuga baseada na geometria da curva e velocidade
+            d.centrifugal = (currentSeg.curve * (speedRatio * speedRatio)) * CONF.CENTRIFUGAL * (isOffRoad ? 1.5 : 1.0); 
+
+            // --------------------------------------------------
+            // FÍSICA LATERAL – PADRÃO COMERCIAL
+            // --------------------------------------------------
+            // Elimina micro ruído involuntário
+            if (Math.abs(d.steer) < 0.03) d.steer = 0;
+
+            // Força gerada pelo jogador
+            const playerForce = d.steer * (d.driftState === 1 ? 0.09 : 0.07) * d.grip;
+
+            // Força da pista (nunca vira, só empurra)
+            const trackForce = d.centrifugal;
+
+            // Assistência suave (somente com input)
+            let assistForce = 0;
+            if (Math.abs(d.steer) > 0.05) {
+                assistForce = -trackForce * 0.25;
+            }
+
+            // Integração final
+            d.playerX += playerForce + assistForce - trackForce;
+
+            // Limites rígidos da pista
+            if (d.playerX > 4.5) d.playerX = 4.5;
+            if (d.playerX < -4.5) d.playerX = -4.5;
 
             // -----------------------------------------------------------------
             // 4. LÓGICA DOS RIVAIS (MÚLTIPLOS)
