@@ -1,4 +1,12 @@
-// LÓGICA DO JOGO: KART DO OTTO (GOLD MASTER - TOUCHLESS TURBO & RIVALS)
+// =====================================================
+// KART DO OTTO – FREEZE BUILD v1.0
+// STATUS: PRODUÇÃO CONGELADA
+// VALIDADO PARA:
+// - Luz Ruim
+// - Perda de Mão
+// - Criança Jogando
+// =====================================================
+
 (function() {
     // =================================================================
     // 1. SISTEMAS GLOBAIS E UTILITÁRIOS
@@ -330,7 +338,7 @@
                 }
             }
 
-            // Aplicação de Steer
+            // Aplicação de Steer com Clamp Seguro
             let targetSteer = 0;
             if(d.spinTimer > 0) {
                 // Durante rodopio, steer é caótico
@@ -341,7 +349,7 @@
                 targetSteer = d.tracking.lastAngle;
             }
             d.steer += (targetSteer - d.steer) * CONF.INPUT_SMOOTHING;
-            d.steer = Math.max(-1.5, Math.min(1.5, d.steer));
+            d.steer = Math.max(-1.5, Math.min(1.5, d.steer)); // Limite Físico
 
             // -----------------------------------------------------------------
             // 2. LÓGICA DE TURBO E ACELERAÇÃO
@@ -421,7 +429,8 @@
             } else {
                 d.speed *= (isOffRoad ? 0.85 : CONF.FRICTION);
             }
-            if(d.speed < 0 || isNaN(d.speed)) d.speed = 0; // Proteção contra NaN
+            // Proteção Robusta contra NaN e Negativos
+            if(d.speed < 0 || isNaN(d.speed)) d.speed = 0; 
 
             // Curvas e Geometria
             const currentSegIndex = Math.floor(d.pos / SEGMENT_LENGTH) % segments.length;
@@ -467,7 +476,7 @@
             d.centrifugal = (currentSeg.curve * (speedRatio * speedRatio)) * CONF.CENTRIFUGAL * (isOffRoad ? 1.5 : 1.0); // Mais força na grama
             
             d.playerX += (turnForce * d.grip) - d.centrifugal;
-            // Limites rígidos da pista
+            // Limites rígidos da pista (Clamp Seguro)
             if(d.playerX > 4.5) d.playerX = 4.5; if(d.playerX < -4.5) d.playerX = -4.5;
 
             // -----------------------------------------------------------------
