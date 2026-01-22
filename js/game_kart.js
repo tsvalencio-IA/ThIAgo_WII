@@ -1,13 +1,12 @@
 // =====================================================
-// KART DO OTTO – GOLD MASTER (FREEZE BUILD FINAL)
-// STATUS: COMMERCIAL RELEASE CANDIDATE
-// MODULE: GAME_KART.JS
+// KART DO OTTO – HYBRID FUSION GOLD MASTER
+// STATUS: PHYSICS (NEW) + RENDER (OLD)
 // ENGINEER: CODE 177
 // =====================================================
 
 (function() {
     // -----------------------------------------------------------------
-    // 1. CONFIGURAÇÃO DE ENGENHARIA (TUNING FINAL)
+    // 1. CONFIGURAÇÃO DE ENGENHARIA (TUNING FINAL - NEW FILE)
     // -----------------------------------------------------------------
     const CONF = {
         // Física de Velocidade
@@ -32,8 +31,8 @@
         INPUT_SMOOTHING: 0.12,
         TURBO_ZONE_Y: 0.35,      // Área superior da tela para gesto
         
-        // Render
-        DRAW_DISTANCE: 55,       // Distância de renderização (segmentos)
+        // Render (Adaptado para suportar o visual antigo)
+        DRAW_DISTANCE: 60,       // Distância de renderização (Old Value)
         FOV: 100
     };
 
@@ -50,31 +49,31 @@
     let trackLength = 0;
 
     const Logic = {
-        // Estado Físico
+        // Estado Físico (NEW)
         speed: 0, 
-        pos: 0,           
-        playerX: 0,       
-        steer: 0,         
+        pos: 0,            
+        playerX: 0,        
+        steer: 0,          
         targetSteer: 0,      
         
-        // Mecânicas
+        // Mecânicas (NEW)
         nitro: 100,
         turboLock: false,
         driftState: 0, driftDir: 0, driftCharge: 0, mtStage: 0, boostTimer: 0,    
         
-        // Corrida
+        // Corrida (NEW)
         state: 'race', 
         finishTimer: 0,
         lap: 1, totalLaps: 3,
         time: 0, rank: 1, score: 0,
         
-        // Visuais
+        // Visuais (NEW properties, compatible with OLD render)
         visualTilt: 0,    
         bounce: 0,
         skyColor: 0, 
         stats: { drifts: 0, overtakes: 0, crashes: 0 },
         
-        // Input
+        // Input (NEW)
         inputState: 0, 
         gestureTimer: 0,
         virtualWheel: { x:0, y:0, r:0, opacity:0 },
@@ -82,7 +81,7 @@
         rivals: [],
 
         // -------------------------------------------------------------
-        // CONSTRUÇÃO DE PISTA (OTTO GP - LAYOUT FINAL)
+        // CONSTRUÇÃO DE PISTA (OLD FILE - OTTO CIRCUIT LAYOUT)
         // -------------------------------------------------------------
         buildTrack: function() {
             segments = [];
@@ -104,23 +103,31 @@
                 if(segments[index]) segments[index].obs.push({ type: type, x: offset });
             };
 
-            // Traçado Profissional
+            // TRAÇADO "OTTO CIRCUIT" (Layout Rico do Arquivo Antigo)
             addRoad(50, 0, 0); 
-            let s1 = addRoad(40, 0.8, 0); addProp(s1+15, 'sign', -1.6);
-            addRoad(20, 0, 0);
-            let s2 = addRoad(30, -1.2, 0); addProp(s2+10, 'cone', 0.9);
+            let sHook = addRoad(20, 0.5, 0); addProp(sHook, 'sign', -1.5);
+            addRoad(20, 1.5, 0);             
+            let sApex1 = addRoad(30, 3.5, 0); addProp(sApex1 + 5, 'cone', 0.9);
+            addRoad(20, 1.0, 0);             
             addRoad(40, 0, 0);
-            let s3 = addRoad(50, 2.3, 0); addProp(s3+25, 'sign', -1.6);
-            addRoad(30, -2.1, 0);
-            let s4 = addRoad(60, 0, 0); 
-            addProp(s4+15, 'cone', -0.6); addProp(s4+35, 'cone', 0.6);
-            addRoad(20, 0.5, 0);
+            let sChicane = addRoad(20, 0, 0); addProp(sChicane, 'sign', 1.5); 
+            addRoad(15, -2.5, 0); addProp(segments.length-5, 'cone', -0.9);
+            addRoad(10, 0, 0);      
+            addRoad(15, 2.5, 0); addProp(segments.length-5, 'cone', 0.9);
+            addRoad(20, 0, 0);    
+            let sLoop = addRoad(30, 0, 0); addProp(sLoop, 'sign', 1.5); addProp(sLoop+5, 'sign', 1.5);
+            addRoad(20, -1.0, 0); 
+            addRoad(60, -3.5, 0); 
+            addRoad(20, -1.0, 0); 
+            let sHazards = addRoad(70, 0, 0);
+            addProp(sHazards + 15, 'cone', 0); addProp(sHazards + 35, 'cone', -0.6); addProp(sHazards + 55, 'cone', 0.6);
+            addRoad(40, 1.2, 0);
 
             trackLength = segments.length * SEGMENT_LENGTH;
         },
 
         // -------------------------------------------------------------
-        // SETUP DE UI (TURBO ISOLADO)
+        // SETUP DE UI (NEW FILE - INPUT SOVEREIGNTY)
         // -------------------------------------------------------------
         setupUI: function() {
             // Remove instâncias antigas para evitar vazamento
@@ -139,7 +146,7 @@
                 userSelect: 'none', touchAction: 'manipulation'
             });
 
-            // Lógica Touch/Click Robusta
+            // Lógica Touch/Click Robusta (New File Logic)
             const toggleTurbo = (e) => {
                 if(e) { e.preventDefault(); e.stopPropagation(); }
                 if(this.nitro > 5) {
@@ -155,15 +162,18 @@
             document.getElementById('game-ui').appendChild(nitroBtn);
         },
 
+        // -------------------------------------------------------------
+        // INIT (NEW FILE LOGIC PRESERVED)
+        // -------------------------------------------------------------
         init: function() { 
-            this.buildTrack();
-            this.setupUI();
+            this.buildTrack(); // Uses Old Scenario
+            this.setupUI();    // Uses New Input Logic
             
             this.speed = 0; this.pos = 0; this.playerX = 0; this.steer = 0;
             this.state = 'race'; this.lap = 1; this.score = 0;
             this.driftState = 0; this.nitro = 100;
             
-            // Rivais com IA Humanizada
+            // Rivais com IA Humanizada (New Logic Params)
             this.rivals = [
                 { pos: 1000, x: -0.4, speed: 0, color: '#2ecc71', name: 'Luigi', aggro: 0.05, mistakeProb: 0.01 },
                 { pos: 800,  x: 0.4,  speed: 0, color: '#3498db', name: 'Toad',  aggro: 0.04, mistakeProb: 0.005 },
@@ -174,24 +184,24 @@
         },
 
         // =============================================================
-        // GAME LOOP PRINCIPAL (SEPARAÇÃO PHYSICS / RENDER)
+        // GAME LOOP PRINCIPAL
         // =============================================================
         update: function(ctx, w, h, pose) {
             
-            // 1. UPDATE DETERMINÍSTICO (Física e Lógica)
+            // 1. UPDATE DETERMINÍSTICO (Física e Lógica - NEW)
             this.updatePhysics(w, h, pose);
             
-            // 2. RENDER VISUAL (Sem alteração de estado)
+            // 2. RENDER VISUAL (Cenário e Efeitos - OLD)
             this.renderWorld(ctx, w, h);
             
-            // 3. RENDER UI
+            // 3. RENDER UI (HUD - OLD VISUALS, NEW DATA)
             this.renderUI(ctx, w, h);
 
             return Math.floor(this.score);
         },
 
         // -------------------------------------------------------------
-        // ENGINE DE FÍSICA (UPDATE)
+        // ENGINE DE FÍSICA (NEW FILE - SOVEREIGN LOGIC)
         // -------------------------------------------------------------
         updatePhysics: function(w, h, pose) {
             const d = Logic;
@@ -397,212 +407,257 @@
         },
 
         // -------------------------------------------------------------
-        // RENDER: VISUAL PURO (SEM LÓGICA DE JOGO)
+        // RENDER: VISUAL PURO (OLD FILE - SCENERY & 3D PROJECTION)
         // -------------------------------------------------------------
         renderWorld: function(ctx, w, h) {
             const d = Logic;
             const cx = w / 2;
             const horizon = h * 0.40;
 
-            // 1. CÉU E PARALLAX
-            const grad = ctx.createLinearGradient(0,0,0,horizon);
-            grad.addColorStop(0, '#0099ff'); grad.addColorStop(1, '#88ccff');
-            ctx.fillStyle = grad; ctx.fillRect(0,0,w,horizon);
+            // 1. CÉU E PARALLAX (Old)
+            const currentSegIndex = Math.floor(d.pos / SEGMENT_LENGTH) % segments.length;
+            const currentSeg = segments[currentSegIndex] || segments[0];
+            const isOffRoad = Math.abs(d.playerX) > 2.2;
 
-            const segIdx = Math.floor(d.pos / SEGMENT_LENGTH) % segments.length;
-            const seg = segments[segIdx] || segments[0];
+            let topSky = d.skyColor === 0 ? "#3388ff" : "#663399";
+            let botSky = d.skyColor === 0 ? "#88ccff" : "#ffaa00";
+            const gradSky = ctx.createLinearGradient(0, 0, 0, horizon);
+            gradSky.addColorStop(0, topSky); gradSky.addColorStop(1, botSky);
+            ctx.fillStyle = gradSky; ctx.fillRect(0, 0, w, horizon);
 
-            // Montanhas
-            ctx.fillStyle = '#228822';
-            const bgX = (seg.curve * 60) + (d.steer * 40); 
+            // Montanhas Parallax (Old)
+            const bgOffset = (currentSeg.curve * 30) + (d.steer * 20);
+            ctx.fillStyle = d.skyColor === 0 ? '#44aa44' : '#331133';
             ctx.beginPath(); ctx.moveTo(0, horizon);
             for(let i=0; i<=12; i++) {
-                const mx = (w/12)*i - (bgX % (w/4));
-                ctx.lineTo(mx, horizon - 40 + Math.sin(i)*15);
+                const mx = (w/12 * i) - (bgOffset * 0.5);
+                const my = horizon - 50 - Math.abs(Math.sin(i + d.pos*0.0001))*40;
+                ctx.lineTo(mx, my);
             }
             ctx.lineTo(w, horizon); ctx.fill();
 
-            // 2. ESTRADA (PSEUDO-3D)
-            ctx.fillStyle = '#336622'; // Offroad
+            // Chão (Old)
+            ctx.fillStyle = isOffRoad ? '#336622' : '#448833';
             ctx.fillRect(0, horizon, w, h-horizon);
 
+            // 2. ESTRADA PSEUDO-3D (Old Algorithm)
+            let drawDistance = 60; // Mais longe para ver curvas
             let dx = 0;
-            let camX = d.playerX * w * 0.35;
-            let renderList = [];
+            let camX = d.playerX * (w * 0.4);
+            let segmentCoords = [];
 
-            for(let n=0; n<CONF.DRAW_DISTANCE; n++) {
-                const idx = (segIdx + n) % segments.length;
-                const s = segments[idx];
-                dx += s.curve;
-                const z = n * 25; 
+            for(let n = 0; n < drawDistance; n++) {
+                const segIdx = (currentSegIndex + n) % segments.length;
+                const seg = segments[segIdx];
+                dx += (seg.curve * 0.8);
                 
-                const scale = 1 / (1 + (z*0.04));
-                const scaleN = 1 / (1 + ((z+25)*0.04));
+                const z = n * 20; 
+                const scale = 1 / (1 + (z * 0.05));
+                const scaleNext = 1 / (1 + ((z+20) * 0.05));
+                const screenY = horizon + ((h - horizon) * scale);
+                const screenYNext = horizon + ((h - horizon) * scaleNext);
+                const screenX = cx - (camX * scale) - (dx * z * scale * 2);
+                const screenXNext = cx - (camX * scaleNext) - ((dx + seg.curve*0.8) * (z+20) * scaleNext * 2);
+                const roadWidth = (w * 3) * scale;
+                const roadWidthNext = (w * 3) * scaleNext;
                 
-                const y1 = horizon + ((h-horizon)*scale);
-                const y2 = horizon + ((h-horizon)*scaleN);
-                
-                const curveOff = dx * z * 0.01; 
-                const curveOffN = (dx + s.curve) * (z+25) * 0.01;
-                
-                const x1 = cx - (camX * scale) - (curveOff * w * scale);
-                const x2 = cx - (camX * scaleN) - (curveOffN * w * scaleN);
-                
-                const w1 = w * 2.5 * scale;
-                const w2 = w * 2.5 * scaleN;
-
-                renderList.push({s:s, x:x1, y:y1, sc:scale, idx:idx});
+                segmentCoords.push({ x: screenX, y: screenY, scale: scale, index: segIdx, z: z });
 
                 // Desenha Trapézios
-                const cGrass = s.color === 'dark' ? '#2d5e1e' : '#55aa44';
-                const cRumble = s.color === 'dark' ? '#c00' : '#fff';
-                const cRoad = s.color === 'dark' ? '#666' : '#777';
+                const grassColor = (seg.color === 'dark') ? (isOffRoad?'#336622':'#448833') : (isOffRoad?'#3a7528':'#55aa44');
+                const roadColor = (seg.color === 'dark') ? '#666' : '#636363';
+                const rumbleColor = (seg.color === 'dark') ? '#c00' : '#fff';
 
-                ctx.fillStyle = cGrass; ctx.fillRect(0, y2, w, y1-y2);
-
-                ctx.fillStyle = cRumble;
-                ctx.beginPath();
-                ctx.moveTo(x1-w1/2-w1*0.1, y1); ctx.lineTo(x1+w1/2+w1*0.1, y1);
-                ctx.lineTo(x2+w2/2+w2*0.1, y2); ctx.lineTo(x2-w2/2-w2*0.1, y2);
-                ctx.fill();
-
-                ctx.fillStyle = cRoad;
-                ctx.beginPath();
-                ctx.moveTo(x1-w1/2, y1); ctx.lineTo(x1+w1/2, y1);
-                ctx.lineTo(x2+w2/2, y2); ctx.lineTo(x2-w2/2, y2);
-                ctx.fill();
-            }
-
-            // 3. SPRITES (Painter's Algorithm)
-            for(let n=CONF.DRAW_DISTANCE-1; n>=0; n--) {
-                const r = renderList[n];
+                ctx.fillStyle = grassColor; ctx.fillRect(0, screenYNext, w, screenY - screenYNext);
                 
-                // Rivais
-                d.rivals.forEach(rival => {
-                    let rel = rival.pos - d.pos;
-                    if(rel < -trackLength/2) rel += trackLength;
-                    if(rel > trackLength/2) rel -= trackLength;
-                    
-                    const segDist = Math.floor(rel / SEGMENT_LENGTH);
-                    if(segDist === n) {
-                        const rx = r.x + (rival.x * w * 1.5 * r.sc);
-                        const scale = r.sc;
-                        this.drawKartSprite(ctx, rx, r.y, scale, rival.color, 0, 0);
-                    }
-                });
-
-                // Obstáculos
-                r.s.obs.forEach(o => {
-                    if(o.x > 500) return; // Se foi "removido", não desenha
-                    const ox = r.x + (o.x * w * 1.5 * r.sc);
-                    const os = w * 0.25 * r.sc;
-                    
-                    if(o.type === 'cone') {
-                        ctx.fillStyle = '#ff6600';
-                        ctx.beginPath(); ctx.moveTo(ox, r.y-os); 
-                        ctx.lineTo(ox-os*0.3, r.y); ctx.lineTo(ox+os*0.3, r.y); ctx.fill();
-                    } else if (o.type === 'sign') {
-                        ctx.fillStyle = '#f1c40f';
-                        ctx.fillRect(ox-os/2, r.y-os, os, os*0.6);
-                        ctx.fillStyle='#000'; ctx.textAlign='center'; ctx.font=`bold ${Math.ceil(os*0.4)}px Arial`;
-                        ctx.fillText(r.s.curve>0?">>>":"<<<", ox, r.y-os*0.2);
-                    }
-                });
+                // Rumble
+                ctx.fillStyle = rumbleColor;
+                ctx.beginPath(); ctx.moveTo(screenX - roadWidth/2 - roadWidth*0.1, screenY); ctx.lineTo(screenX + roadWidth/2 + roadWidth*0.1, screenY); ctx.lineTo(screenXNext + roadWidthNext/2 + roadWidthNext*0.1, screenYNext); ctx.lineTo(screenXNext - roadWidthNext/2 - roadWidthNext*0.1, screenYNext); ctx.fill();
+                
+                // Road
+                ctx.fillStyle = roadColor;
+                ctx.beginPath(); ctx.moveTo(screenX - roadWidth/2, screenY); ctx.lineTo(screenX + roadWidth/2, screenY); ctx.lineTo(screenXNext + roadWidthNext/2, screenYNext); ctx.lineTo(screenXNext - roadWidthNext/2, screenYNext); ctx.fill();
             }
 
-            // 4. JOGADOR
-            const carScale = w * 0.0008; 
-            this.drawKartSprite(ctx, cx, h*0.85 + d.bounce, 1.0, '#d00', d.steer, d.visualTilt);
-            
-            // Partículas
-            particles.forEach((p,i) => {
-                p.x += p.vx; p.y += p.vy; p.l--;
-                ctx.globalAlpha = p.l/20; ctx.fillStyle=p.c; 
-                ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill();
-                if(p.l<=0) particles.splice(i,1);
+            // 3. SPRITES (Painter's Algorithm - Old)
+            for(let n = drawDistance-1; n >= 0; n--) {
+                const coord = segmentCoords[n];
+                const seg = segments[coord.index];
+                
+                // Rivais (Mapped to New Logic properties)
+                d.rivals.forEach(r => {
+                    let rRelPos = r.pos - d.pos;
+                    if(rRelPos < -trackLength/2) rRelPos += trackLength;
+                    if(rRelPos > trackLength/2) rRelPos -= trackLength;
+                    
+                    let distInSegs = Math.floor(rRelPos / SEGMENT_LENGTH);
+                    if (Math.abs(distInSegs - n) < 1 && n > 2) {
+                        const rScale = coord.scale;
+                        const rX = coord.x + (r.x * (w * 3) * rScale / 2);
+                        const rY = coord.y;
+                        
+                        ctx.save(); ctx.translate(rX, rY); ctx.scale(rScale * 12, rScale * 12);
+                        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(0, 0, 8, 3, 0, 0, Math.PI*2); ctx.fill();
+                        ctx.fillStyle = r.color; ctx.fillRect(-6, -8, 12, 6);
+                        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, -12, 4, 0, Math.PI*2); ctx.fill();
+                        ctx.restore();
+                    }
+                });
+
+                // Obstáculos (Mapped to Old Types)
+                if(seg.obs.length > 0) {
+                    seg.obs.forEach(o => {
+                        // Skip if "removed" by New Physics (o.x = 999)
+                        if (o.x > 500) return;
+
+                        const sScale = coord.scale;
+                        const sX = coord.x + (o.x * (w * 3) * sScale / 2);
+                        const sY = coord.y;
+                        const size = (w * 0.22) * sScale;
+
+                        if (o.type === 'cone') {
+                            ctx.fillStyle = '#ff5500'; ctx.beginPath(); ctx.moveTo(sX, sY - size); ctx.lineTo(sX - size*0.3, sY); ctx.lineTo(sX + size*0.3, sY); ctx.fill();
+                        } else {
+                            ctx.fillStyle = '#f1c40f'; ctx.fillRect(sX - size/2, sY - size, size, size*0.6);
+                            ctx.fillStyle = '#000'; ctx.textAlign='center'; ctx.font = `bold ${size*0.4}px Arial`;
+                            ctx.fillText(seg.curve > 0 ? ">>>" : "<<<", sX, sY - size*0.2);
+                        }
+                    });
+                }
+            }
+
+            // 4. JOGADOR (Old High-Fidelity Sprite)
+            const carScale = w * 0.0055;
+            this.drawKartSprite(ctx, cx, h*0.85 + d.bounce, carScale, d.steer, d.visualTilt, d);
+
+            // Gerador de Partículas Visual (Injecting Visual FX omitted by New Logic)
+            if (d.driftState === 1 && d.time % 4 === 0) {
+                 const pX = cx + (d.playerX * w * 0.4) + (d.driftDir * 50);
+                 const color = d.mtStage === 2 ? '#ff5500' : (d.mtStage === 1 ? '#00ffff' : '#ffffaa');
+                 particles.push({ x: pX, y: h * 0.9, vx: -d.driftDir * (2+Math.random()*4), vy: -2-Math.random()*3, c: color, l: 20 });
+            }
+
+            // Render Partículas
+            particles.forEach((p, i) => { 
+                p.x += p.vx; p.y += p.vy; p.l--; 
+                if(p.l<=0) {
+                    particles.splice(i,1); 
+                } else { 
+                    ctx.fillStyle=p.c; ctx.globalAlpha = p.l / 50; 
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill(); 
+                    ctx.globalAlpha = 1.0; 
+                } 
             });
-            ctx.globalAlpha = 1;
         },
 
-        // HELPER: Desenha Sprite do Kart
-        drawKartSprite: function(ctx, x, y, scale, color, steer, tilt) {
-            ctx.save();
-            ctx.translate(x, y);
-            ctx.rotate(tilt * 0.02);
-            ctx.scale(scale, scale);
+        // HELPER: Desenha Sprite do Kart (From OLD - Richer Details)
+        drawKartSprite: function(ctx, cx, y, carScale, steer, tilt, d) {
+            ctx.save(); ctx.translate(cx, y); ctx.scale(carScale, carScale);
+            
+            let visualRotation = tilt * 0.02; 
+            if (d.driftState === 1) visualRotation += (d.driftDir * 0.3);
+            
+            ctx.rotate(visualRotation);
 
             // Sombra
-            ctx.fillStyle = 'rgba(0,0,0,0.4)';
-            ctx.beginPath(); ctx.ellipse(0, 10, 50, 15, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(0, 35, 60, 15, 0, 0, Math.PI*2); ctx.fill();
 
             // Chassi
-            ctx.fillStyle = color;
-            ctx.beginPath(); 
-            ctx.moveTo(-30, -10); ctx.lineTo(30, -10); 
-            ctx.lineTo(40, 20); ctx.lineTo(-40, 20); ctx.fill();
-            
-            // Spoiler
-            ctx.fillStyle = '#880000'; ctx.fillRect(-35, -15, 70, 8);
+            const gradBody = ctx.createLinearGradient(-30, 0, 30, 0);
+            gradBody.addColorStop(0, '#cc0000'); gradBody.addColorStop(0.5, '#ff4444'); gradBody.addColorStop(1, '#cc0000');
+            ctx.fillStyle = gradBody;
+            ctx.beginPath(); ctx.moveTo(-25, -30); ctx.lineTo(25, -30); ctx.lineTo(40, 10); ctx.lineTo(10, 35); ctx.lineTo(-10, 35); ctx.lineTo(-40, 10); ctx.fill();
 
-            // Rodas
-            ctx.fillStyle = '#111';
-            const drawWheel = (wx, wy) => {
-                ctx.save(); ctx.translate(wx, wy); ctx.rotate(steer * 0.5); 
-                ctx.fillRect(-8, -12, 16, 24); ctx.restore();
-            };
-            drawWheel(-45, 15); drawWheel(45, 15); 
-            drawWheel(-35, -5); drawWheel(35, -5); 
-
-            // Piloto
-            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, -15, 14, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#222'; ctx.fillRect(-10, -18, 20, 6);
-
-            // Fogo Turbo
-            const d = Logic;
-            if(d && (d.turboLock || d.boostTimer > 0)) {
-                ctx.fillStyle = (d.mtStage===2 || d.turboLock) ? '#0ff' : '#ff0';
-                const f = Math.random()*15;
-                ctx.beginPath(); ctx.arc(-20, 15, 8+f, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.arc(20, 15, 8+f, 0, Math.PI*2); ctx.fill();
+            // Turbo Flame (Checked against New Logic State)
+            if (d.turboLock || d.boostTimer > 0) {
+                const fireSize = 10 + Math.random() * 15;
+                ctx.fillStyle = (d.mtStage === 2 || d.turboLock) ? '#00ffff' : '#ffaa00';
+                ctx.beginPath(); ctx.arc(-20, -30, fireSize, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(20, -30, fireSize, 0, Math.PI*2); ctx.fill();
             }
 
-            ctx.restore();
+            // Rodas
+            const wheelAngle = steer * 0.8;
+            ctx.fillStyle = '#111';
+            const drawWheel = (wx, wy) => {
+                ctx.save(); ctx.translate(wx, wy); ctx.rotate(wheelAngle); ctx.fillRect(-12, -15, 24, 30); ctx.fillStyle = '#666'; ctx.fillRect(-5, -5, 10, 10); ctx.fillStyle = '#111'; ctx.restore();
+            };
+            drawWheel(-45, 15); drawWheel(45, 15); ctx.fillRect(-50, -25, 20, 30); ctx.fillRect(30, -25, 20, 30);
+
+            // Piloto
+            ctx.save(); ctx.translate(0, -10); ctx.rotate(steer * 0.3);
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, -20, 18, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#333'; ctx.fillRect(-15, -25, 30, 8);
+            ctx.fillStyle = 'red'; ctx.font='bold 12px Arial'; ctx.textAlign='center'; ctx.fillText('M', 0, -32);
+            ctx.restore(); ctx.restore(); 
         },
 
+        // -------------------------------------------------------------
+        // UI VISUAL (OLD FILE - BETTER AESTHETICS)
+        // -------------------------------------------------------------
         renderUI: function(ctx, w, h) {
             const d = Logic;
-            const hudY = 30;
-            const barW = 200;
             
-            // Background
-            ctx.fillStyle = '#222'; ctx.fillRect(w/2 - barW/2, hudY, barW, 20);
-            
-            // Barra Nitro
-            const nColor = d.turboLock ? '#0ff' : (d.nitro>30 ? '#0d0' : '#d00');
-            ctx.fillStyle = nColor; 
-            ctx.fillRect(w/2 - barW/2 + 2, hudY + 2, (barW-4)*(d.nitro/100), 16);
-            
-            // Textos
-            ctx.font="bold 20px Arial"; ctx.fillStyle="#fff"; 
-            ctx.textAlign="right"; ctx.fillText(Math.floor(d.speed) + " KM/H", w-20, hudY+15);
-            ctx.textAlign="left"; ctx.fillText("POS " + d.rank + "/4", 20, hudY+15);
-
-            // Volante Virtual (Debug Visual)
-            if(d.virtualWheel.opacity > 0) {
-                const vw = d.virtualWheel;
-                ctx.strokeStyle = `rgba(255,255,255,${vw.opacity})`;
-                ctx.lineWidth = 4;
-                ctx.beginPath(); ctx.arc(vw.x, vw.y, vw.r, 0, Math.PI*2); ctx.stroke();
+            if(d.state === 'race') {
+                const hudX = w - 80; const hudY = h - 60;
+                ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.beginPath(); ctx.arc(hudX, hudY, 55, 0, Math.PI*2); ctx.fill();
                 
-                const ix = vw.x + Math.cos(d.steer - Math.PI/2) * vw.r;
-                const iy = vw.y + Math.sin(d.steer - Math.PI/2) * vw.r;
-                ctx.fillStyle = '#0ff'; ctx.beginPath(); ctx.arc(ix, iy, 6, 0, Math.PI*2); ctx.fill();
+                // Velocímetro
+                const rpm = Math.min(1, d.speed / CONF.TURBO_MAX_SPEED);
+                ctx.beginPath(); ctx.arc(hudX, hudY, 50, Math.PI, Math.PI + (Math.PI * rpm));
+                ctx.lineWidth = 6; ctx.strokeStyle = (d.turboLock || d.boostTimer > 0) ? '#00ffff' : '#ff3300'; ctx.stroke();
+
+                ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; 
+                ctx.font = "bold 36px 'Russo One'"; ctx.fillText(Math.floor(d.speed), hudX, hudY + 10);
+                ctx.font = "10px Arial"; ctx.fillText(`POS ${d.rank}`, hudX, hudY + 25);
+
+                // Barra Nitro
+                const nW = 220;
+                ctx.fillStyle = '#111'; ctx.fillRect(w/2 - nW/2, 20, nW, 20);
+                // Cor do Nitro muda se estiver travado
+                ctx.fillStyle = d.turboLock ? '#00ffff' : (d.nitro > 20 ? '#00aa00' : '#ff3300');
+                ctx.fillRect(w/2 - nW/2 + 2, 22, (nW-4) * (d.nitro/100), 16); // Adjusted for New nitro range (0-100)
+                
+                ctx.font="bold 12px Arial"; ctx.fillStyle="#fff"; 
+                const nitroText = d.turboLock ? "TURBO MAXIMO!" : (d.nitro < 100 ? "RECARREGANDO..." : "TURBO PRONTO (MÃOS P/ CIMA)");
+                ctx.fillText(nitroText, w/2, 35);
+
+                // Volante Virtual (Feedback Essencial)
+                // Adapted to use New Logic's 'd.virtualWheel'
+                if (d.virtualWheel.opacity > 0.01) {
+                    const vw = d.virtualWheel;
+                    ctx.save(); 
+                    ctx.globalAlpha = vw.opacity * 0.8;
+                    ctx.translate(vw.x, vw.y);
+                    
+                    // Zona Turbo
+                    const inZone = vw.y < h * CONF.TURBO_ZONE_Y;
+                    ctx.strokeStyle = inZone ? '#00ffff' : '#ffffff'; 
+                    ctx.lineWidth = inZone ? 10 : 6;
+                    
+                    ctx.beginPath(); ctx.arc(0,0, vw.r, 0, Math.PI*2); ctx.stroke();
+                    ctx.rotate(d.steer * 1.5);
+                    ctx.fillStyle = inZone ? '#00ffff' : '#3498db'; ctx.fillRect(-5, -vw.r, 10, 25);
+                    ctx.restore();
+                    ctx.globalAlpha = 1.0;
+                }
+            } 
+            else {
+                ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,w,h);
+                ctx.fillStyle = "#fff"; ctx.textAlign="center"; 
+                
+                const title = d.rank === 1 ? "VITÓRIA!" : `${d.rank}º LUGAR`;
+                const color = d.rank === 1 ? "#ffff00" : "#aaaaaa";
+                
+                ctx.font="bold 60px 'Russo One'"; ctx.fillStyle = color; ctx.fillText(title, w/2, h*0.3);
+                ctx.font="bold 24px Arial"; ctx.fillStyle = "#fff"; ctx.fillText(`SCORE FINAL: ${Math.floor(d.score)}`, w/2, h*0.45);
+                ctx.font="18px Arial"; ctx.fillStyle = "#ccc"; ctx.fillText(`DRIFTS: ${d.stats.drifts} | ULTRAPASSAGENS: ${d.stats.overtakes}`, w/2, h*0.55);
             }
         }
     };
 
     if(window.System) {
-        window.System.registerGame('drive', 'Otto Kart', '🏎️', Logic, {
+        window.System.registerGame('drive', 'Otto Kart GP', '🏎️', Logic, {
             camOpacity: 0.4, 
             showWheel: false
         });
