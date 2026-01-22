@@ -13,8 +13,8 @@
         MAX_SPEED: 235,         // Velocidade base (controlável)
         TURBO_MAX_SPEED: 420,   // Velocidade turbo (adrenalina)
         ACCEL: 1.5,
-        FRICTION: 0.97,
-        OFFROAD_DECEL: 0.88,
+        FRICTION: 0.985,
+OFFROAD_DECEL: 0.93,
         
         // Física de Curva (Ajuste Fino de Feel)
         CENTRIFUGAL_FORCE: 0.19, // Reduzido (era 0.38) - Permite correção mas pune inatividade
@@ -41,7 +41,9 @@
     // -----------------------------------------------------------------
     let particles = [];
     let nitroBtn = null;
-    
+    let lapPopupTimer = 0;
+let lapPopupText = "";
+
     // Dados da Pista
     const SEGMENT_LENGTH = 200; 
     const RUMBLE_LENGTH = 3;    
@@ -276,7 +278,7 @@
             // Aceleração
             const hasGas = (d.inputState > 0 || d.turboLock);
             if (hasGas && d.state === 'race') {
-                d.speed += (currentMax - d.speed) * 0.05;
+               d.speed += (currentMax - d.speed) * 0.075;
             } else {
                 d.speed *= CONF.FRICTION; // Desaceleração natural
             }
@@ -375,14 +377,23 @@ for(let i=0; i<1; i++) { // apenas segmento atual
             // --- E. LOOP & RIVAIS ---
             d.pos += d.speed;
             while (d.pos >= trackLength) {
-                d.pos -= trackLength;
-                d.lap++;
-                if(d.lap > d.totalLaps && d.state === 'race') {
-                    d.state = 'finished';
-                    window.System.msg(d.rank === 1 ? "VITORIA!" : "FIM!");
-                    if(d.rank===1) window.Sfx.play(1000,'square',0.5,1);
-                }
-            }
+    d.pos -= trackLength;
+    d.lap++;
+
+    // POPUP DE VOLTA
+    if (d.lap <= d.totalLaps) {
+        lapPopupText = `VOLTA ${d.lap}/${d.totalLaps}`;
+        lapPopupTimer = 120; // duração do aviso
+        window.System.msg(lapPopupText);
+    }
+
+    if(d.lap > d.totalLaps && d.state === 'race') {
+        d.state = 'finished';
+        window.System.msg(d.rank === 1 ? "VITÓRIA!" : "FIM!");
+        if(d.rank===1) window.Sfx.play(1000,'square',0.5,1);
+    }
+}
+
             while(d.pos < 0) d.pos += trackLength;
 
             // Atualiza Rivais
@@ -392,10 +403,10 @@ for(let i=0; i<1; i++) { // apenas segmento atual
                 if(dist > trackLength/2) dist -= trackLength;
                 if(dist < -trackLength/2) dist += trackLength;
 
-                let targetS = CONF.MAX_SPEED * 0.72;
+                let targetS = CONF.MAX_SPEED * 0.64;
                 // Rubber Banding
                 if(dist > 1200) targetS *= 0.9;
-                if(dist < -1200) targetS *= 1.02;
+                if(dist < -1200) targetS *= 1.005;
                 
                 r.speed += (targetS - r.speed) * r.aggro;
                 r.pos += r.speed;
@@ -622,15 +633,27 @@ for(let i=0; i<1; i++) { // apenas segmento atual
     if (d.state === 'race') {
 
         // =========================
-        // VOLTAS
+        // POPUP CENTRAL DE VOLTA
+        // =========================
+        if (lapPopupTimer > 0) {
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, lapPopupTimer / 30);
+            ctx.fillStyle = '#00ffff';
+            ctx.font = "bold 48px 'Russo One'";
+            ctx.textAlign = 'center';
+            ctx.fillText(lapPopupText, w / 2, h * 0.45);
+            ctx.restore();
+            lapPopupTimer--;
+        }
+
+        // =========================
+        // VOLTAS (EMBAIXO)
         // =========================
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(20, 20, 130, 50);
+        ctx.fillRect(20, h - 50, 120, 30);
         ctx.fillStyle = '#fff';
-        ctx.font = "bold 16px Arial";
-        ctx.fillText("VOLTA", 30, 38);
-        ctx.font = "bold 22px Arial";
-        ctx.fillText(`${d.lap}/${d.totalLaps}`, 30, 62);
+        ctx.font = "bold 14px Arial";
+        ctx.fillText(`VOLTA ${d.lap}/${d.totalLaps}`, 30, h - 30);
 
         // =========================
         // VELOCÍMETRO
@@ -667,7 +690,7 @@ for(let i=0; i<1; i++) { // apenas segmento atual
         ctx.fillRect(w / 2 - nW / 2 + 2, 22, (nW - 4) * (d.nitro / 100), 16);
 
         // =========================
-        // MINI MAPA
+        // MINI MAPA (CIRCULAR)
         // =========================
         const mapX = w - 140;
         const mapY = 130;
@@ -709,35 +732,29 @@ for(let i=0; i<1; i++) { // apenas segmento atual
         // =========================
         // VOLANTE VIRTUAL ESPORTIVO
         // =========================
-        if (d.virtualWheel && d.virtualWheel.opacity > 0.01) {
+        if (d.virtualWheel.opacity > 0.01) {
             const vw = d.virtualWheel;
 
             ctx.save();
             ctx.globalAlpha = vw.opacity;
             ctx.translate(vw.x, vw.y);
 
-            // Aro externo
             ctx.lineWidth = 8;
             ctx.strokeStyle = '#222';
             ctx.beginPath();
             ctx.arc(0, 0, vw.r, 0, Math.PI * 2);
             ctx.stroke();
 
-            // Aro interno esportivo
             ctx.lineWidth = 4;
             ctx.strokeStyle = '#00ffff';
             ctx.beginPath();
             ctx.arc(0, 0, vw.r - 8, 0, Math.PI * 2);
             ctx.stroke();
 
-            // Giro do volante
             ctx.rotate(d.steer * 1.4);
-
-            // Marcador central (estilo racing)
             ctx.fillStyle = '#ff3300';
             ctx.fillRect(-4, -vw.r + 10, 8, 22);
 
-            // Centro do volante
             ctx.fillStyle = '#111';
             ctx.beginPath();
             ctx.arc(0, 0, 10, 0, Math.PI * 2);
