@@ -292,20 +292,21 @@
 
             // 1. Inércia (Centrífuga): Sempre ativa, empurra para fora
             // [MODIFIED] Added playerX scaling to punish bad driving
-            const centrifugal = -seg.curve * (speedRatio * speedRatio) * CONF.CENTRIFUGAL_FORCE * (1 + Math.abs(d.playerX) * 0.3);
-            
-            // 2. Tração (Grip): Só existe se houver input de direção
-            let dynamicGrip = CONF.GRIP_CARVING; 
-            
-            // [TUNING] Grip zero se input for irrelevante (evita auto-pilot)
-            if (Math.abs(d.steer) < 0.05) dynamicGrip = 0;
-            
-            if(d.driftState === 1) dynamicGrip = CONF.GRIP_DRIFT;
-            
-            // Se jogador não vira, playerForce = 0. Inércia vence.
-            const playerForce = d.steer * CONF.STEER_AUTHORITY * dynamicGrip * speedRatio;
-            
-            d.playerX += playerForce + centrifugal;
+            // --- CURVAS AJUSTADAS REALISTICAMENTE ---
+const centrifugal = -seg.curve * (speedRatio * speedRatio) * (CONF.CENTRIFUGAL_FORCE * 0.65); 
+// reduzimos de 1 * 0.22 para 0.65 do valor, sem escalar com playerX
+
+let dynamicGrip = CONF.GRIP_CARVING * 0.7; 
+// reduzimos grip para não grudar na borda
+if (Math.abs(d.steer) < 0.05) dynamicGrip = 0;
+if(d.driftState === 1) dynamicGrip = CONF.GRIP_DRIFT * 0.85; 
+// drift continua, mas suavizado
+
+const playerForce = d.steer * CONF.STEER_AUTHORITY * dynamicGrip * speedRatio * 0.9;
+// adicionamos leve suavização
+
+d.playerX += playerForce + centrifugal * 0.9;
+// reduzimos centrífuga em 10% extra para suavizar sensação de puxar
 
             // Limites da Pista
             if(d.playerX < -4.5) { d.playerX = -4.5; d.speed *= 0.95; }
