@@ -738,6 +738,8 @@ if (rivalTotal > playerTotal) pAhead++;
         ctx.fillStyle = d.turboLock ? '#00ffff' : (d.nitro > 20 ? '#00aa00' : '#ff3300');
         ctx.fillRect(w / 2 - nW / 2 + 2, 22, (nW - 4) * (d.nitro / 100), 16);
 
+        if (!minimapPoints || minimapPoints.length < 2) return;
+
         // =========================
 // MINI MAPA REAL DA PISTA
 // =========================
@@ -746,7 +748,9 @@ const mapY = 160;
 
 ctx.save();
 ctx.translate(mapX, mapY);
-ctx.translate(-minimapPoints[0].x, -minimapPoints[0].y);
+const center = minimapPoints[Math.floor(minimapPoints.length / 2)];
+ctx.translate(-center.x, -center.y);
+
 
 ctx.scale(0.45, 0.45);
 
