@@ -179,7 +179,7 @@ buildTrack: function() {
     trackLength = segments.length * SEGMENT_LENGTH;
 
     // >>> PASSO 5: gerar mini mapa real da pista <<<
-    buildMiniMap();
+    buildMiniMap(segments);
 },
         // -------------------------------------------------------------
         // SETUP DE UI (NEW FILE - INPUT SOVEREIGNTY)
@@ -797,7 +797,9 @@ d.rivals.forEach(r => {
     ctx.arc(
         minimapPoints[ri].x,
         minimapPoints[ri].y,
-        5, 0, Math.PI * 2
+        5,
+        0,
+        Math.PI * 2
     );
     ctx.fill();
 });
