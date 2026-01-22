@@ -303,9 +303,21 @@ if(d.driftState === 1) dynamicGrip = CONF.GRIP_DRIFT * 0.75;
 
 // Scaling por posição para suavizar puxão se perto da borda
 const edgeFactor = 1 - Math.min(Math.abs(d.playerX) / 4.5, 0.8); 
-const playerForce = d.steer * CONF.STEER_AUTHORITY * dynamicGrip * speedRatio * 0.9 * edgeFactor;
 
-d.playerX += playerForce + centrifugal * edgeFactor;
+const playerForce =
+    d.steer *
+    CONF.STEER_AUTHORITY *
+    dynamicGrip *
+    speedRatio *
+    0.9 *
+    edgeFactor;
+
+// Cancela parte da centrífuga quando o jogador está corrigindo a curva
+const counterSteerFactor = 1 - Math.min(Math.abs(d.steer), 0.9);
+const correctedCentrifugal = centrifugal * counterSteerFactor;
+
+d.playerX += playerForce + correctedCentrifugal * edgeFactor;
+
 
 
 
@@ -340,8 +352,9 @@ d.playerX += playerForce + centrifugal * edgeFactor;
 
             // --- D. COLISÃO DETERMINÍSTICA ---
             // Verifica obstáculos no segmento atual e no próximo (Lookahead curto)
-            const hitbox = 0.3; // menor
-for(let i=0; i<2; i++) {
+            const hitbox = 0.22; // hitbox realista, alinhada ao sprite
+for(let i=0; i<1; i++) { // apenas segmento atual
+
     const checkIdx = (segIdx + i) % segments.length;
     const checkSeg = segments[checkIdx];
     checkSeg.obs.forEach(o => {
@@ -379,10 +392,10 @@ for(let i=0; i<2; i++) {
                 if(dist > trackLength/2) dist -= trackLength;
                 if(dist < -trackLength/2) dist += trackLength;
 
-                let targetS = CONF.MAX_SPEED * 0.80;
+                let targetS = CONF.MAX_SPEED * 0.72;
                 // Rubber Banding
                 if(dist > 1200) targetS *= 0.9;
-                if(dist < -1200) targetS *= 1.05;
+                if(dist < -1200) targetS *= 1.02;
                 
                 r.speed += (targetS - r.speed) * r.aggro;
                 r.pos += r.speed;
@@ -604,64 +617,152 @@ for(let i=0; i<2; i++) {
         // UI VISUAL (OLD FILE - BETTER AESTHETICS)
         // -------------------------------------------------------------
         renderUI: function(ctx, w, h) {
-            const d = Logic;
-            
-            if(d.state === 'race') {
-                const hudX = w - 80; const hudY = h - 60;
-                ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.beginPath(); ctx.arc(hudX, hudY, 55, 0, Math.PI*2); ctx.fill();
-                
-                // Velocímetro
-                const rpm = Math.min(1, d.speed / CONF.TURBO_MAX_SPEED);
-                ctx.beginPath(); ctx.arc(hudX, hudY, 50, Math.PI, Math.PI + (Math.PI * rpm));
-                ctx.lineWidth = 6; ctx.strokeStyle = (d.turboLock || d.boostTimer > 0) ? '#00ffff' : '#ff3300'; ctx.stroke();
+    const d = Logic;
 
-                ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; 
-                ctx.font = "bold 36px 'Russo One'"; ctx.fillText(Math.floor(d.speed), hudX, hudY + 10);
-                ctx.font = "10px Arial"; ctx.fillText(`POS ${d.rank}`, hudX, hudY + 25);
+    if (d.state === 'race') {
 
-                // Barra Nitro
-                const nW = 220;
-                ctx.fillStyle = '#111'; ctx.fillRect(w/2 - nW/2, 20, nW, 20);
-                // Cor do Nitro muda se estiver travado
-                ctx.fillStyle = d.turboLock ? '#00ffff' : (d.nitro > 20 ? '#00aa00' : '#ff3300');
-                ctx.fillRect(w/2 - nW/2 + 2, 22, (nW-4) * (d.nitro/100), 16); // Adjusted for New nitro range (0-100)
-                
-                ctx.font="bold 12px Arial"; ctx.fillStyle="#fff"; 
-                const nitroText = d.turboLock ? "TURBO MAXIMO!" : (d.nitro < 100 ? "RECARREGANDO..." : "TURBO PRONTO (MÃOS P/ CIMA)");
-                ctx.fillText(nitroText, w/2, 35);
+        // =========================
+        // VOLTAS
+        // =========================
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(20, 20, 130, 50);
+        ctx.fillStyle = '#fff';
+        ctx.font = "bold 16px Arial";
+        ctx.fillText("VOLTA", 30, 38);
+        ctx.font = "bold 22px Arial";
+        ctx.fillText(`${d.lap}/${d.totalLaps}`, 30, 62);
 
-                // Volante Virtual (Feedback Essencial)
-                // Adapted to use New Logic's 'd.virtualWheel'
-                if (d.virtualWheel.opacity > 0.01) {
-                    const vw = d.virtualWheel;
-                    ctx.save(); 
-                    ctx.globalAlpha = vw.opacity * 0.8;
-                    ctx.translate(vw.x, vw.y);
-                    
-                    // Zona Turbo
-                    const inZone = vw.y < h * CONF.TURBO_ZONE_Y;
-                    ctx.strokeStyle = inZone ? '#00ffff' : '#ffffff'; 
-                    ctx.lineWidth = inZone ? 10 : 6;
-                    
-                    ctx.beginPath(); ctx.arc(0,0, vw.r, 0, Math.PI*2); ctx.stroke();
-                    ctx.rotate(d.steer * 1.5);
-                    ctx.fillStyle = inZone ? '#00ffff' : '#3498db'; ctx.fillRect(-5, -vw.r, 10, 25);
-                    ctx.restore();
-                    ctx.globalAlpha = 1.0;
-                }
-            } 
-            else {
-                ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,w,h);
-                ctx.fillStyle = "#fff"; ctx.textAlign="center"; 
-                
-                const title = d.rank === 1 ? "VITÓRIA!" : `${d.rank}º LUGAR`;
-                const color = d.rank === 1 ? "#ffff00" : "#aaaaaa";
-                
-                ctx.font="bold 60px 'Russo One'"; ctx.fillStyle = color; ctx.fillText(title, w/2, h*0.3);
-                ctx.font="bold 24px Arial"; ctx.fillStyle = "#fff"; ctx.fillText(`SCORE FINAL: ${Math.floor(d.score)}`, w/2, h*0.45);
-                ctx.font="18px Arial"; ctx.fillStyle = "#ccc"; ctx.fillText(`DRIFTS: ${d.stats.drifts} | ULTRAPASSAGENS: ${d.stats.overtakes}`, w/2, h*0.55);
-            }
+        // =========================
+        // VELOCÍMETRO
+        // =========================
+        const hudX = w - 80;
+        const hudY = h - 60;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.beginPath();
+        ctx.arc(hudX, hudY, 55, 0, Math.PI * 2);
+        ctx.fill();
+
+        const rpm = Math.min(1, d.speed / CONF.TURBO_MAX_SPEED);
+        ctx.beginPath();
+        ctx.arc(hudX, hudY, 50, Math.PI, Math.PI + Math.PI * rpm);
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = (d.turboLock || d.boostTimer > 0) ? '#00ffff' : '#ff3300';
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.font = "bold 36px 'Russo One'";
+        ctx.fillText(Math.floor(d.speed), hudX, hudY + 10);
+        ctx.font = "10px Arial";
+        ctx.fillText(`POS ${d.rank}`, hudX, hudY + 25);
+
+        // =========================
+        // BARRA NITRO
+        // =========================
+        const nW = 220;
+        ctx.fillStyle = '#111';
+        ctx.fillRect(w / 2 - nW / 2, 20, nW, 20);
+        ctx.fillStyle = d.turboLock ? '#00ffff' : (d.nitro > 20 ? '#00aa00' : '#ff3300');
+        ctx.fillRect(w / 2 - nW / 2 + 2, 22, (nW - 4) * (d.nitro / 100), 16);
+
+        // =========================
+        // MINI MAPA
+        // =========================
+        const mapX = w - 140;
+        const mapY = 130;
+        const mapR = 50;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.beginPath();
+        ctx.arc(mapX, mapY, mapR + 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(mapX, mapY, mapR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#ff0000';
+        ctx.beginPath();
+        ctx.moveTo(mapX, mapY);
+        ctx.lineTo(mapX, mapY - mapR);
+        ctx.stroke();
+
+        const p = (d.pos / trackLength) % 1;
+        const pa = p * Math.PI * 2 - Math.PI / 2;
+        ctx.fillStyle = '#00ffff';
+        ctx.beginPath();
+        ctx.arc(mapX + Math.cos(pa) * mapR, mapY + Math.sin(pa) * mapR, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        d.rivals.forEach(r => {
+            const rp = (r.pos / trackLength) % 1;
+            const ra = rp * Math.PI * 2 - Math.PI / 2;
+            ctx.fillStyle = r.color;
+            ctx.beginPath();
+            ctx.arc(mapX + Math.cos(ra) * mapR, mapY + Math.sin(ra) * mapR, 4, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // =========================
+        // VOLANTE VIRTUAL ESPORTIVO
+        // =========================
+        if (d.virtualWheel && d.virtualWheel.opacity > 0.01) {
+            const vw = d.virtualWheel;
+
+            ctx.save();
+            ctx.globalAlpha = vw.opacity;
+            ctx.translate(vw.x, vw.y);
+
+            // Aro externo
+            ctx.lineWidth = 8;
+            ctx.strokeStyle = '#222';
+            ctx.beginPath();
+            ctx.arc(0, 0, vw.r, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Aro interno esportivo
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#00ffff';
+            ctx.beginPath();
+            ctx.arc(0, 0, vw.r - 8, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Giro do volante
+            ctx.rotate(d.steer * 1.4);
+
+            // Marcador central (estilo racing)
+            ctx.fillStyle = '#ff3300';
+            ctx.fillRect(-4, -vw.r + 10, 8, 22);
+
+            // Centro do volante
+            ctx.fillStyle = '#111';
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+            ctx.globalAlpha = 1;
         }
+
+    } else {
+
+        // =========================
+        // TELA FINAL
+        // =========================
+        ctx.fillStyle = "rgba(0,0,0,0.85)";
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+
+        const title = d.rank === 1 ? "VITÓRIA!" : `${d.rank}º LUGAR`;
+        ctx.font = "bold 60px 'Russo One'";
+        ctx.fillText(title, w / 2, h * 0.3);
+    }
+}
+
     };
 
     if(window.System) {
