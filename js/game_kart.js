@@ -4,6 +4,22 @@
 // ENGINEER: CODE 177
 // =====================================================
 
+let minimapPoints = [];
+
+function buildMiniMap() {
+    minimapPoints = [];
+    let x = 0;
+    let y = 0;
+    let dir = -Math.PI / 2;
+
+    segments.forEach(seg => {
+        dir += seg.curve * 0.002;
+        x += Math.cos(dir) * 4;
+        y += Math.sin(dir) * 4;
+        minimapPoints.push({ x, y });
+    });
+}
+
 (function() {
     // -----------------------------------------------------------------
     // 1. CONFIGURAÇÃO DE ENGENHARIA (TUNING FINAL - FEEL ADJUSTED)
@@ -83,51 +99,80 @@ let lapPopupText = "";
         rivals: [],
 
         // -------------------------------------------------------------
-        // CONSTRUÇÃO DE PISTA (OLD FILE - OTTO CIRCUIT LAYOUT)
-        // -------------------------------------------------------------
-        buildTrack: function() {
-            segments = [];
-            const addRoad = (enter, curve, y) => {
-                const startIdx = segments.length;
-                for(let i=0; i<enter; i++) {
-                    const isDark = Math.floor(segments.length/RUMBLE_LENGTH)%2;
-                    segments.push({
-                        curve: curve,
-                        y: y, 
-                        color: isDark ? 'dark' : 'light',
-                        obs: []
-                    });
-                }
-                return startIdx;
-            };
+// CONSTRUÇÃO DE PISTA (OLD FILE - OTTO CIRCUIT LAYOUT)
+// -------------------------------------------------------------
+buildTrack: function() {
+    segments = [];
 
-            const addProp = (index, type, offset) => {
-                if(segments[index]) segments[index].obs.push({ type: type, x: offset });
-            };
+    const addRoad = (enter, curve, y) => {
+        const startIdx = segments.length;
+        for(let i = 0; i < enter; i++) {
+            const isDark = Math.floor(segments.length / RUMBLE_LENGTH) % 2;
+            segments.push({
+                curve: curve,
+                y: y,
+                color: isDark ? 'dark' : 'light',
+                obs: []
+            });
+        }
+        return startIdx;
+    };
 
-            // TRAÇADO "OTTO CIRCUIT" (Layout Rico do Arquivo Antigo)
-            addRoad(50, 0, 0); 
-            let sHook = addRoad(20, 0.5, 0); addProp(sHook, 'sign', -1.5);
-            addRoad(20, 1.5, 0);             
-            let sApex1 = addRoad(30, 3.5, 0); addProp(sApex1 + 5, 'cone', 0.9);
-            addRoad(20, 1.0, 0);             
-            addRoad(40, 0, 0);
-            let sChicane = addRoad(20, 0, 0); addProp(sChicane, 'sign', 1.5); 
-            addRoad(15, -2.5, 0); addProp(segments.length-5, 'cone', -0.9);
-            addRoad(10, 0, 0);      
-            addRoad(15, 2.5, 0); addProp(segments.length-5, 'cone', 0.9);
-            addRoad(20, 0, 0);    
-            let sLoop = addRoad(30, 0, 0); addProp(sLoop, 'sign', 1.5); addProp(sLoop+5, 'sign', 1.5);
-            addRoad(20, -1.0, 0); 
-            addRoad(60, -3.5, 0); 
-            addRoad(20, -1.0, 0); 
-            let sHazards = addRoad(70, 0, 0);
-            addProp(sHazards + 15, 'cone', 0); addProp(sHazards + 35, 'cone', -0.6); addProp(sHazards + 55, 'cone', 0.6);
-            addRoad(40, 1.2, 0);
+    const addProp = (index, type, offset) => {
+        if (segments[index]) {
+            segments[index].obs.push({ type: type, x: offset });
+        }
+    };
 
-            trackLength = segments.length * SEGMENT_LENGTH;
-        },
+    // TRAÇADO "OTTO CIRCUIT" (Layout Rico do Arquivo Antigo)
+    addRoad(50, 0, 0); 
 
+    let sHook = addRoad(20, 0.5, 0);
+    addProp(sHook, 'sign', -1.5);
+
+    addRoad(20, 1.5, 0);             
+
+    let sApex1 = addRoad(30, 3.5, 0);
+    addProp(sApex1 + 5, 'cone', 0.9);
+
+    addRoad(20, 1.0, 0);             
+
+    addRoad(40, 0, 0);
+
+    let sChicane = addRoad(20, 0, 0);
+    addProp(sChicane, 'sign', 1.5); 
+
+    addRoad(15, -2.5, 0);
+    addProp(segments.length - 5, 'cone', -0.9);
+
+    addRoad(10, 0, 0);      
+
+    addRoad(15, 2.5, 0);
+    addProp(segments.length - 5, 'cone', 0.9);
+
+    addRoad(20, 0, 0);    
+
+    let sLoop = addRoad(30, 0, 0);
+    addProp(sLoop, 'sign', 1.5);
+    addProp(sLoop + 5, 'sign', 1.5);
+
+    addRoad(20, -1.0, 0); 
+    addRoad(60, -3.5, 0); 
+    addRoad(20, -1.0, 0); 
+
+    let sHazards = addRoad(70, 0, 0);
+    addProp(sHazards + 15, 'cone', 0);
+    addProp(sHazards + 35, 'cone', -0.6);
+    addProp(sHazards + 55, 'cone', 0.6);
+
+    addRoad(40, 1.2, 0);
+
+    // comprimento total da pista
+    trackLength = segments.length * SEGMENT_LENGTH;
+
+    // >>> PASSO 5: gerar mini mapa real da pista <<<
+    buildMiniMap();
+},
         // -------------------------------------------------------------
         // SETUP DE UI (NEW FILE - INPUT SOVEREIGNTY)
         // -------------------------------------------------------------
@@ -690,44 +735,56 @@ for(let i=0; i<1; i++) { // apenas segmento atual
         ctx.fillRect(w / 2 - nW / 2 + 2, 22, (nW - 4) * (d.nitro / 100), 16);
 
         // =========================
-        // MINI MAPA (CIRCULAR)
-        // =========================
-        const mapX = w - 140;
-        const mapY = 130;
-        const mapR = 50;
+// MINI MAPA REAL DA PISTA
+// =========================
+const mapX = w - 200;
+const mapY = 200;
 
-        ctx.fillStyle = 'rgba(0,0,0,0.65)';
-        ctx.beginPath();
-        ctx.arc(mapX, mapY, mapR + 8, 0, Math.PI * 2);
-        ctx.fill();
+ctx.save();
+ctx.translate(mapX, mapY);
+ctx.scale(0.6, 0.6);
 
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(mapX, mapY, mapR, 0, Math.PI * 2);
-        ctx.stroke();
+// desenha a pista
+ctx.strokeStyle = '#999';
+ctx.lineWidth = 3;
+ctx.beginPath();
+minimapPoints.forEach((p, i) => {
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
+});
+ctx.stroke();
 
-        ctx.strokeStyle = '#ff0000';
-        ctx.beginPath();
-        ctx.moveTo(mapX, mapY);
-        ctx.lineTo(mapX, mapY - mapR);
-        ctx.stroke();
+// jogador
+const playerIndex =
+    Math.floor((d.pos / trackLength) * minimapPoints.length) %
+    minimapPoints.length;
 
-        const p = (d.pos / trackLength) % 1;
-        const pa = p * Math.PI * 2 - Math.PI / 2;
-        ctx.fillStyle = '#00ffff';
-        ctx.beginPath();
-        ctx.arc(mapX + Math.cos(pa) * mapR, mapY + Math.sin(pa) * mapR, 5, 0, Math.PI * 2);
-        ctx.fill();
+ctx.fillStyle = '#00ffff';
+ctx.beginPath();
+ctx.arc(
+    minimapPoints[playerIndex].x,
+    minimapPoints[playerIndex].y,
+    6, 0, Math.PI * 2
+);
+ctx.fill();
 
-        d.rivals.forEach(r => {
-            const rp = (r.pos / trackLength) % 1;
-            const ra = rp * Math.PI * 2 - Math.PI / 2;
-            ctx.fillStyle = r.color;
-            ctx.beginPath();
-            ctx.arc(mapX + Math.cos(ra) * mapR, mapY + Math.sin(ra) * mapR, 4, 0, Math.PI * 2);
-            ctx.fill();
-        });
+// rivais
+d.rivals.forEach(r => {
+    const ri =
+        Math.floor((r.pos / trackLength) * minimapPoints.length) %
+        minimapPoints.length;
+
+    ctx.fillStyle = r.color;
+    ctx.beginPath();
+    ctx.arc(
+        minimapPoints[ri].x,
+        minimapPoints[ri].y,
+        5, 0, Math.PI * 2
+    );
+    ctx.fill();
+});
+
+ctx.restore();
 
         // =========================
         // VOLANTE VIRTUAL ESPORTIVO
