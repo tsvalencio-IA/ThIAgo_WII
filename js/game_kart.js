@@ -4,9 +4,16 @@
 // ENGINEER: CODE 177
 // =====================================================
 
+
+(function() {
+
+
+// =========================
+// MINI MAPA (SCOPED SAFE)
+// =========================
 let minimapPoints = [];
 
-function buildMiniMap() {
+function buildMiniMap(segments) {
     minimapPoints = [];
     let x = 0;
     let y = 0;
@@ -20,7 +27,8 @@ function buildMiniMap() {
     });
 }
 
-(function() {
+
+
     // -----------------------------------------------------------------
     // 1. CONFIGURAÇÃO DE ENGENHARIA (TUNING FINAL - FEEL ADJUSTED)
     // -----------------------------------------------------------------
