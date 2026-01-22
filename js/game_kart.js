@@ -293,20 +293,21 @@
             // 1. Inércia (Centrífuga): Sempre ativa, empurra para fora
             // [MODIFIED] Added playerX scaling to punish bad driving
             // --- CURVAS AJUSTADAS REALISTICAMENTE ---
-const centrifugal = -seg.curve * (speedRatio * speedRatio) * (CONF.CENTRIFUGAL_FORCE * 0.65); 
-// reduzimos de 1 * 0.22 para 0.65 do valor, sem escalar com playerX
+// Centrífuga suavizada com scaling por posição
+const centrifugal = -seg.curve * (speedRatio * speedRatio) * (CONF.CENTRIFUGAL_FORCE * 0.5); 
+// 0.5 reduz efeito geral
 
-let dynamicGrip = CONF.GRIP_CARVING * 0.7; 
-// reduzimos grip para não grudar na borda
-if (Math.abs(d.steer) < 0.05) dynamicGrip = 0;
-if(d.driftState === 1) dynamicGrip = CONF.GRIP_DRIFT * 0.85; 
-// drift continua, mas suavizado
+let dynamicGrip = CONF.GRIP_CARVING * 0.65; 
+if(Math.abs(d.steer) < 0.05) dynamicGrip = 0;
+if(d.driftState === 1) dynamicGrip = CONF.GRIP_DRIFT * 0.75; 
 
-const playerForce = d.steer * CONF.STEER_AUTHORITY * dynamicGrip * speedRatio * 0.9;
-// adicionamos leve suavização
+// Scaling por posição para suavizar puxão se perto da borda
+const edgeFactor = 1 - Math.min(Math.abs(d.playerX) / 4.5, 0.8); 
+const playerForce = d.steer * CONF.STEER_AUTHORITY * dynamicGrip * speedRatio * 0.9 * edgeFactor;
 
-d.playerX += playerForce + centrifugal * 0.9;
-// reduzimos centrífuga em 10% extra para suavizar sensação de puxar
+d.playerX += playerForce + centrifugal * edgeFactor;
+
+
 
             // Limites da Pista
             if(d.playerX < -4.5) { d.playerX = -4.5; d.speed *= 0.95; }
@@ -339,23 +340,24 @@ d.playerX += playerForce + centrifugal * 0.9;
 
             // --- D. COLISÃO DETERMINÍSTICA ---
             // Verifica obstáculos no segmento atual e no próximo (Lookahead curto)
-            for(let i=0; i<2; i++) {
-                const checkIdx = (segIdx + i) % segments.length;
-                const checkSeg = segments[checkIdx];
-                if(checkSeg.obs.length > 0) {
-                    checkSeg.obs.forEach(o => {
-                        // Colisão simples por caixa
-                        if(Math.abs(d.playerX - o.x) < CONF.HITBOX_WIDTH) {
-                             d.speed *= CONF.CRASH_PENALTY;
-                             d.stats.crashes++;
-                             o.x = 999; // Remove obstáculo (State Change)
-                             d.bounce = -15; // Visual Feedback
-                             window.Sfx.crash();
-                             window.Gfx.shake(15);
-                        }
-                    });
-                }
-            }
+            const hitbox = 0.3; // menor
+for(let i=0; i<2; i++) {
+    const checkIdx = (segIdx + i) % segments.length;
+    const checkSeg = segments[checkIdx];
+    checkSeg.obs.forEach(o => {
+        if(o.x > 10) return; // ignorar obstáculos removidos
+        // colisão só se jogador estiver dentro da faixa visível da estrada
+        if(Math.abs(d.playerX - o.x) < hitbox && Math.abs(d.playerX) < 4.5) {
+            d.speed *= CONF.CRASH_PENALTY;
+            d.stats.crashes++;
+            o.x = 999;
+            d.bounce = -15;
+            window.Sfx.crash();
+            window.Gfx.shake(15);
+        }
+    });
+}
+
 
             // --- E. LOOP & RIVAIS ---
             d.pos += d.speed;
