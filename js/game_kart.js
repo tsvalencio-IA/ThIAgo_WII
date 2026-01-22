@@ -751,20 +751,54 @@ if (rivalTotal > playerTotal) pAhead++;
         // =========================
 // MINI MAPA REAL DA PISTA
 // =========================
-const mapX = w - 220;
-const mapY = 160;
+// =========================
+// MINI MAPA REAL (COMPACTO E FIXO)
+// =========================
+const mapSize = 120;
+const mapX = w / 2 - mapSize / 2;
+const mapY = h * 0.58;
 
+// fundo
 ctx.save();
-ctx.translate(mapX, mapY);
-const center = minimapPoints[Math.floor(minimapPoints.length / 2)];
-ctx.translate(-center.x, -center.y);
+ctx.globalAlpha = 0.6;
+ctx.fillStyle = '#000';
+ctx.fillRect(mapX - 6, mapY - 6, mapSize + 12, mapSize + 12);
+ctx.globalAlpha = 1;
 
+// viewport
+ctx.beginPath();
+ctx.rect(mapX, mapY, mapSize, mapSize);
+ctx.clip();
 
-ctx.scale(0.45, 0.45);
+// normalização
+const bounds = minimapPoints.reduce((b, p) => ({
+    minX: Math.min(b.minX, p.x),
+    maxX: Math.max(b.maxX, p.x),
+    minY: Math.min(b.minY, p.y),
+    maxY: Math.max(b.maxY, p.y),
+}), {
+    minX: Infinity, maxX: -Infinity,
+    minY: Infinity, maxY: -Infinity
+});
 
-// desenha a pista
-ctx.strokeStyle = '#999';
-ctx.lineWidth = 3;
+const scale = Math.min(
+    mapSize / (bounds.maxX - bounds.minX),
+    mapSize / (bounds.maxY - bounds.minY)
+) * 0.85;
+
+ctx.translate(
+    mapX + mapSize / 2,
+    mapY + mapSize / 2
+);
+ctx.scale(scale, scale);
+ctx.translate(
+    -(bounds.minX + bounds.maxX) / 2,
+    -(bounds.minY + bounds.maxY) / 2
+);
+
+// pista
+ctx.strokeStyle = '#aaa';
+ctx.lineWidth = 2;
 ctx.beginPath();
 minimapPoints.forEach((p, i) => {
     if (i === 0) ctx.moveTo(p.x, p.y);
@@ -773,34 +807,18 @@ minimapPoints.forEach((p, i) => {
 ctx.stroke();
 
 // jogador
-const playerIndex =
-    Math.floor((d.pos / trackLength) * minimapPoints.length) %
-    minimapPoints.length;
-
+const pi = Math.floor((d.pos / trackLength) * minimapPoints.length) % minimapPoints.length;
 ctx.fillStyle = '#00ffff';
 ctx.beginPath();
-ctx.arc(
-    minimapPoints[playerIndex].x,
-    minimapPoints[playerIndex].y,
-    6, 0, Math.PI * 2
-);
+ctx.arc(minimapPoints[pi].x, minimapPoints[pi].y, 5, 0, Math.PI * 2);
 ctx.fill();
 
 // rivais
 d.rivals.forEach(r => {
-    const ri =
-        Math.floor((r.pos / trackLength) * minimapPoints.length) %
-        minimapPoints.length;
-
+    const ri = Math.floor((r.pos / trackLength) * minimapPoints.length) % minimapPoints.length;
     ctx.fillStyle = r.color;
     ctx.beginPath();
-    ctx.arc(
-        minimapPoints[ri].x,
-        minimapPoints[ri].y,
-        5,
-        0,
-        Math.PI * 2
-    );
+    ctx.arc(minimapPoints[ri].x, minimapPoints[ri].y, 4, 0, Math.PI * 2);
     ctx.fill();
 });
 
