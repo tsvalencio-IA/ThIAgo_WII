@@ -448,10 +448,10 @@ for(let i=0; i<1; i++) { // apenas segmento atual
                 if(dist > trackLength/2) dist -= trackLength;
                 if(dist < -trackLength/2) dist += trackLength;
 
-                let targetS = CONF.MAX_SPEED * 0.64;
+                let targetS = CONF.MAX_SPEED * 0.48;
                 // Rubber Banding
-                if(dist > 1200) targetS *= 0.9;
-                if(dist < -1200) targetS *= 1.005;
+                if(dist > 1200) targetS *= 0.85;
+                if(dist < -1200) targetS *= 0.97;
                 
                 r.speed += (targetS - r.speed) * r.aggro;
                 r.pos += r.speed;
@@ -462,8 +462,12 @@ for(let i=0; i<1; i++) { // apenas segmento atual
                 if (Math.random() < r.mistakeProb) idealLine = -(rSeg.curve * -0.5); // Erro humano
                 r.x += (idealLine - r.x) * 0.05;
 
-                let rTotalPos = r.pos + ((d.lap-1)*trackLength);
-                if(rTotalPos > d.pos + ((d.lap-1)*trackLength)) pAhead++;
+                let playerTotal = d.pos + (d.lap * trackLength);
+let rivalTotal = r.pos + ((d.lap - 1) * trackLength);
+
+
+if (rivalTotal > playerTotal) pAhead++;
+
             });
             d.rank = 1 + pAhead;
 
@@ -518,7 +522,7 @@ for(let i=0; i<1; i++) { // apenas segmento atual
             ctx.fillRect(0, horizon, w, h-horizon);
 
             // 2. ESTRADA PSEUDO-3D (Old Algorithm)
-            let drawDistance = 60; // Mais longe para ver curvas
+            let drawDistance = 100; // Mais longe para ver curvas
             let dx = 0;
             let camX = d.playerX * (w * 0.4);
             let segmentCoords = [];
@@ -568,7 +572,7 @@ for(let i=0; i<1; i++) { // apenas segmento atual
                     if(rRelPos > trackLength/2) rRelPos -= trackLength;
                     
                     let distInSegs = Math.floor(rRelPos / SEGMENT_LENGTH);
-                    if (Math.abs(distInSegs - n) < 1 && n > 2) {
+                    if (Math.abs(distInSegs - n) < 1.5 && n > 1) {
                         const rScale = coord.scale;
                         const rX = coord.x + (r.x * (w * 3) * rScale / 2);
                         const rY = coord.y;
@@ -737,12 +741,14 @@ for(let i=0; i<1; i++) { // apenas segmento atual
         // =========================
 // MINI MAPA REAL DA PISTA
 // =========================
-const mapX = w - 200;
-const mapY = 200;
+const mapX = w - 220;
+const mapY = 160;
 
 ctx.save();
 ctx.translate(mapX, mapY);
-ctx.scale(0.6, 0.6);
+ctx.translate(-minimapPoints[0].x, -minimapPoints[0].y);
+
+ctx.scale(0.45, 0.45);
 
 // desenha a pista
 ctx.strokeStyle = '#999';
@@ -846,3 +852,6 @@ ctx.restore();
         });
     }
 })();
+
+
+ e agora esta correto ? 
