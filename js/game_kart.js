@@ -735,8 +735,11 @@ if (rivalTotal > playerTotal) pAhead++;
         ctx.font = "bold 36px 'Russo One'";
         ctx.fillText(Math.floor(d.speed), hudX, hudY + 10);
         ctx.font = "10px Arial";
-        ctx.fillText(`POS ${d.rank}`, hudX, hudY + 25);
-
+        const totalRacers = d.rivals.length + 1;
+ctx.font = "bold 14px Arial";
+ctx.fillText(`POSIÇÃO`, hudX, hudY + 22);
+ctx.font = "bold 18px 'Russo One'";
+ctx.fillText(`${d.rank} / ${totalRacers}`, hudX, hudY + 42);
         // =========================
         // BARRA NITRO
         // =========================
@@ -794,7 +797,7 @@ ctx.scale(scale, scale);
 // rotação do mapa conforme a curva atual da pista
 const segIdxMap = Math.floor(d.pos / SEGMENT_LENGTH) % segments.length;
 const segMap = segments[segIdxMap];
-ctx.rotate(-segMap.curve * 0.15);
+ctx.rotate(-segMap.curve * 0.8);
 ctx.translate(
     -(bounds.minX + bounds.maxX) / 2,
     -(bounds.minY + bounds.maxY) / 2
