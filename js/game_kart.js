@@ -6,7 +6,7 @@
 
 (function() {
     // -----------------------------------------------------------------
-    // 1. CONFIGURAÇÃO DE ENGENHARIA (TUNING FINAL - NEW FILE)
+    // 1. CONFIGURAÇÃO DE ENGENHARIA (TUNING FINAL - FEEL ADJUSTED)
     // -----------------------------------------------------------------
     const CONF = {
         // Física de Velocidade
@@ -16,9 +16,9 @@
         FRICTION: 0.97,
         OFFROAD_DECEL: 0.88,
         
-        // Física de Curva (Determinística)
-        CENTRIFUGAL_FORCE: 0.38, // Força inercial (joga para fora)
-        STEER_AUTHORITY: 0.12,   // Autoridade do volante
+        // Física de Curva (Ajuste Fino de Feel)
+        CENTRIFUGAL_FORCE: 0.28, // Reduzido (era 0.38) - Permite correção mas pune inatividade
+        STEER_AUTHORITY: 0.22,   // Aumentado (era 0.12) - Resposta rápida
         GRIP_CARVING: 1.25,      // Bônus de tração ao fazer a curva certa
         GRIP_DRIFT: 0.94,        // Tração durante drift
         
@@ -28,7 +28,7 @@
         
         // Input & UX
         DEADZONE: 0.05,
-        INPUT_SMOOTHING: 0.12,
+        INPUT_SMOOTHING: 0.35,   // Aumentado (era 0.12) - Menos lag, mais snap
         TURBO_ZONE_Y: 0.35,      // Área superior da tela para gesto
         
         // Render (Adaptado para suportar o visual antigo)
@@ -291,10 +291,15 @@
             const speedRatio = d.speed / CONF.MAX_SPEED;
 
             // 1. Inércia (Centrífuga): Sempre ativa, empurra para fora
-            const centrifugal = -seg.curve * (speedRatio * speedRatio) * CONF.CENTRIFUGAL_FORCE;
+            // [MODIFIED] Added playerX scaling to punish bad driving
+            const centrifugal = -seg.curve * (speedRatio * speedRatio) * CONF.CENTRIFUGAL_FORCE * (1 + Math.abs(d.playerX) * 0.5);
             
             // 2. Tração (Grip): Só existe se houver input de direção
             let dynamicGrip = CONF.GRIP_CARVING; 
+            
+            // [TUNING] Grip zero se input for irrelevante (evita auto-pilot)
+            if (Math.abs(d.steer) < 0.05) dynamicGrip = 0;
+            
             if(d.driftState === 1) dynamicGrip = CONF.GRIP_DRIFT;
             
             // Se jogador não vira, playerForce = 0. Inércia vence.
