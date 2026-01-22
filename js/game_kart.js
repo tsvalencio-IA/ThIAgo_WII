@@ -17,7 +17,7 @@
         OFFROAD_DECEL: 0.88,
         
         // Física de Curva (Ajuste Fino de Feel)
-        CENTRIFUGAL_FORCE: 0.22, // Reduzido (era 0.38) - Permite correção mas pune inatividade
+        CENTRIFUGAL_FORCE: 0.19, // Reduzido (era 0.38) - Permite correção mas pune inatividade
         STEER_AUTHORITY: 0.18,   // Aumentado (era 0.12) - Resposta rápida
         GRIP_CARVING: 1.25,      // Bônus de tração ao fazer a curva certa
         GRIP_DRIFT: 0.94,        // Tração durante drift
