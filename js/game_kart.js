@@ -175,9 +175,9 @@
             
             // Rivais com IA Humanizada (New Logic Params)
             this.rivals = [
-                { pos: 1000, x: -0.4, speed: 0, color: '#2ecc71', name: 'Luigi', aggro: 0.05, mistakeProb: 0.01 },
-                { pos: 800,  x: 0.4,  speed: 0, color: '#3498db', name: 'Toad',  aggro: 0.04, mistakeProb: 0.005 },
-                { pos: 1200, x: 0,    speed: 0, color: '#e74c3c', name: 'Bowser', aggro: 0.07, mistakeProb: 0.02 }
+                { pos: 1000, x: -0.4, speed: 0, color: '#2ecc71', name: 'Luigi', aggro: 0.03, mistakeProb: 0.01 },
+                { pos: 800,  x: 0.4,  speed: 0, color: '#3498db', name: 'Toad',  aggro: 0.025, mistakeProb: 0.005 },
+                { pos: 1200, x: 0,    speed: 0, color: '#e74c3c', name: 'Bowser', aggro: 0.04, mistakeProb: 0.02 }
             ];
 
             window.System.msg("LARGADA!"); 
@@ -381,8 +381,8 @@ for(let i=0; i<2; i++) {
 
                 let targetS = CONF.MAX_SPEED * 0.80;
                 // Rubber Banding
-                if(dist > 1200) targetS *= 0.8;
-                if(dist < -1200) targetS *= 1.2;
+                if(dist > 1200) targetS *= 0.9;
+                if(dist < -1200) targetS *= 1.05;
                 
                 r.speed += (targetS - r.speed) * r.aggro;
                 r.pos += r.speed;
