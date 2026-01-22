@@ -448,10 +448,10 @@ for(let i=0; i<1; i++) { // apenas segmento atual
                 if(dist > trackLength/2) dist -= trackLength;
                 if(dist < -trackLength/2) dist += trackLength;
 
-                let targetS = CONF.MAX_SPEED * 0.48;
+                let targetS = CONF.MAX_SPEED * 0.45;
                 // Rubber Banding
-                if(dist > 1200) targetS *= 0.85;
-                if(dist < -1200) targetS *= 0.97;
+                if(dist > 1200) targetS *= 0.82;
+                if(dist < -1200) targetS *= 0.95;
                 
                 r.speed += (targetS - r.speed) * r.aggro;
                 r.pos += r.speed;
