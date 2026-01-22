@@ -855,7 +855,4 @@ ctx.restore();
             showWheel: false
         });
     }
-})();
-
-
- e agora esta correto ? 
+})()
