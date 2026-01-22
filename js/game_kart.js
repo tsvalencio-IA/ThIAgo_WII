@@ -755,9 +755,9 @@ if (rivalTotal > playerTotal) pAhead++;
 // MINI MAPA REAL (COMPACTO E FIXO)
 // =========================
 const mapSize = 120;
-const mapX = w / 2 - mapSize / 2;
-const mapY = h * 0.58;
-
+// canto superior esquerdo (não conflita com nada)
+const mapX = 20;
+const mapY = 90;
 // fundo
 ctx.save();
 ctx.globalAlpha = 0.6;
@@ -791,6 +791,10 @@ ctx.translate(
     mapY + mapSize / 2
 );
 ctx.scale(scale, scale);
+// rotação do mapa conforme a curva atual da pista
+const segIdxMap = Math.floor(d.pos / SEGMENT_LENGTH) % segments.length;
+const segMap = segments[segIdxMap];
+ctx.rotate(-segMap.curve * 0.15);
 ctx.translate(
     -(bounds.minX + bounds.maxX) / 2,
     -(bounds.minY + bounds.maxY) / 2
