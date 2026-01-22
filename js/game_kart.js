@@ -379,7 +379,7 @@ for(let i=0; i<2; i++) {
                 if(dist > trackLength/2) dist -= trackLength;
                 if(dist < -trackLength/2) dist += trackLength;
 
-                let targetS = CONF.MAX_SPEED * 0.96;
+                let targetS = CONF.MAX_SPEED * 0.80;
                 // Rubber Banding
                 if(dist > 1200) targetS *= 0.8;
                 if(dist < -1200) targetS *= 1.2;
