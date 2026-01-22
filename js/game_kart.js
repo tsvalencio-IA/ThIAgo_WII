@@ -255,7 +255,7 @@
             
             // Suavização Input
             d.steer += (d.targetSteer - d.steer) * CONF.INPUT_SMOOTHING;
-            d.steer = Math.max(-1.5, Math.min(1.5, d.steer));
+            d.steer = Math.max(-1.2, Math.min(1.2, d.steer));
 
             if(nitroBtn) nitroBtn.style.opacity = (detected > 0) ? 0.3 : 1.0;
 
@@ -292,7 +292,7 @@
 
             // 1. Inércia (Centrífuga): Sempre ativa, empurra para fora
             // [MODIFIED] Added playerX scaling to punish bad driving
-            const centrifugal = -seg.curve * (speedRatio * speedRatio) * CONF.CENTRIFUGAL_FORCE * (1 + Math.abs(d.playerX) * 0.5);
+            const centrifugal = -seg.curve * (speedRatio * speedRatio) * CONF.CENTRIFUGAL_FORCE * (1 + Math.abs(d.playerX) * 0.3);
             
             // 2. Tração (Grip): Só existe se houver input de direção
             let dynamicGrip = CONF.GRIP_CARVING; 
