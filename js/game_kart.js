@@ -309,8 +309,21 @@ buildTrack: function() {
             }
             
             // Suavização Input
-            d.steer += (d.targetSteer - d.steer) * CONF.INPUT_SMOOTHING;
-            d.steer = Math.max(-1.2, Math.min(1.2, d.steer));
+            // Direção com sensação de volante real (peso + retorno)
+const steerDiff = d.targetSteer - d.steer;
+
+// Quanto mais rápido, mais pesado o volante
+const speedFactor = Math.min(d.speed / CONF.MAX_SPEED, 1);
+
+// Retorno natural do volante (auto-centralização)
+const wheelReturn = -d.steer * (0.04 + speedFactor * 0.06);
+
+// Resposta direta ao input, sem flutuação
+d.steer += steerDiff * (0.35 - speedFactor * 0.18);
+d.steer += wheelReturn;
+
+// Limite físico de esterçamento (Mario Kart style)
+d.steer = Math.max(-1.0, Math.min(1.0, d.steer));
 
             if(nitroBtn) nitroBtn.style.opacity = (detected > 0) ? 0.3 : 1.0;
 
