@@ -78,7 +78,8 @@ let lapPopupText = "";
         // Estado Físico (NEW)
         speed: 0, 
         pos: 0,            
-        playerX: 0,        
+        playerX: 0,
+        latSpeed: 0,
         steer: 0,          
         targetSteer: 0,      
         
@@ -362,7 +363,7 @@ d.steer = Math.max(-1.25, Math.min(1.25, d.steer));
             // [MODIFIED] Added playerX scaling to punish bad driving
             // --- CURVAS AJUSTADAS REALISTICAMENTE ---
 // Centrífuga suavizada com scaling por posição
-const centrifugal = -seg.curve * (speedRatio * speedRatio) * (CONF.CENTRIFUGAL_FORCE * 0.5); 
+const centrifugal = -seg.curve * (speedRatio * speedRatio) * (CONF.CENTRIFUGAL_FORCE * 0.75); 
 // 0.5 reduz efeito geral
 
 let dynamicGrip = CONF.GRIP_CARVING * 0.65; 
@@ -381,17 +382,44 @@ const playerForce =
     edgeFactor;
 
 // Cancela parte da centrífuga quando o jogador está corrigindo a curva
-const counterSteerFactor = 1 - Math.min(Math.abs(d.steer), 0.9);
-const correctedCentrifugal = centrifugal * counterSteerFactor;
+const counterSteerFactor = 1 - Math.abs(d.steer) * 0.65;
 
-d.playerX += playerForce + correctedCentrifugal * edgeFactor;
+
+const correctedCentrifugal = centrifugal * counterSteerFactor;
+// Perda de velocidade por erro de curva (realismo)
+const curveError = Math.abs(seg.curve) * speedRatio * (1 - Math.abs(d.steer));
+d.speed *= (1 - Math.min(curveError * 0.035, 0.12));
+            // Transferência de peso longitudinal (realismo final)
+const throttleGripLoss = d.turboLock ? 0.92 : 0.96;
+d.latSpeed *= throttleGripLoss;
+
+
+// ===============================
+// FÍSICA LATERAL REAL (PESO)
+// ===============================
+d.latSpeed += (playerForce + correctedCentrifugal) * 0.85;
+
+// atrito lateral = kart colado no chão
+d.latSpeed *= 0.83;
+
+// movimento real acumulado
+d.playerX += d.latSpeed * edgeFactor;
+
 
 
 
 
             // Limites da Pista
-            if(d.playerX < -4.5) { d.playerX = -4.5; d.speed *= 0.95; }
-            if(d.playerX > 4.5)  { d.playerX = 4.5;  d.speed *= 0.95; }
+          // Limites da Pista (erro real = sair da pista)
+if(d.playerX < -5.2) { 
+    d.playerX = -5.2; 
+    d.speed *= 0.88; 
+}
+if(d.playerX > 5.2)  { 
+    d.playerX = 5.2;  
+    d.speed *= 0.88; 
+}
+
 
             // Mecânica de Drift
             if (d.driftState === 0) {
