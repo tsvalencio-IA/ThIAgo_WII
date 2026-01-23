@@ -17,10 +17,11 @@ function buildMiniMap(segments) {
     minimapPoints = [];
     let x = 0;
     let y = 0;
-    let dir = -Math.PI / 2;
+    let dir = -Math.PI / 2; // Começa apontando para cima
 
     segments.forEach(seg => {
-        dir += seg.curve * 0.002;
+        // Acumula a curva para formar a geometria correta da pista (X, Y)
+        dir += seg.curve * 0.003; 
         x += Math.cos(dir) * 4;
         y += Math.sin(dir) * 4;
         minimapPoints.push({ x, y });
@@ -38,7 +39,7 @@ function buildMiniMap(segments) {
         TURBO_MAX_SPEED: 420,   // Velocidade turbo (adrenalina)
         ACCEL: 1.5,
         FRICTION: 0.985,
-OFFROAD_DECEL: 0.93,
+        OFFROAD_DECEL: 0.93,
         
         // Física de Curva (Ajuste Fino de Feel)
         CENTRIFUGAL_FORCE: 0.19, // Reduzido (era 0.38) - Permite correção mas pune inatividade
@@ -66,7 +67,7 @@ OFFROAD_DECEL: 0.93,
     let particles = [];
     let nitroBtn = null;
     let lapPopupTimer = 0;
-let lapPopupText = "";
+    let lapPopupText = "";
 
     // Dados da Pista
     const SEGMENT_LENGTH = 200; 
@@ -107,80 +108,81 @@ let lapPopupText = "";
         rivals: [],
 
         // -------------------------------------------------------------
-// CONSTRUÇÃO DE PISTA (OLD FILE - OTTO CIRCUIT LAYOUT)
-// -------------------------------------------------------------
-buildTrack: function() {
-    segments = [];
+        // CONSTRUÇÃO DE PISTA (OLD FILE - OTTO CIRCUIT LAYOUT)
+        // -------------------------------------------------------------
+        buildTrack: function() {
+            segments = [];
 
-    const addRoad = (enter, curve, y) => {
-        const startIdx = segments.length;
-        for(let i = 0; i < enter; i++) {
-            const isDark = Math.floor(segments.length / RUMBLE_LENGTH) % 2;
-            segments.push({
-                curve: curve,
-                y: y,
-                color: isDark ? 'dark' : 'light',
-                obs: []
-            });
-        }
-        return startIdx;
-    };
+            const addRoad = (enter, curve, y) => {
+                const startIdx = segments.length;
+                for(let i = 0; i < enter; i++) {
+                    const isDark = Math.floor(segments.length / RUMBLE_LENGTH) % 2;
+                    segments.push({
+                        curve: curve,
+                        y: y,
+                        color: isDark ? 'dark' : 'light',
+                        obs: []
+                    });
+                }
+                return startIdx;
+            };
 
-    const addProp = (index, type, offset) => {
-        if (segments[index]) {
-            segments[index].obs.push({ type: type, x: offset });
-        }
-    };
+            const addProp = (index, type, offset) => {
+                if (segments[index]) {
+                    segments[index].obs.push({ type: type, x: offset });
+                }
+            };
 
-    // TRAÇADO "OTTO CIRCUIT" (Layout Rico do Arquivo Antigo)
-    addRoad(50, 0, 0); 
+            // TRAÇADO "OTTO CIRCUIT" (Layout Rico do Arquivo Antigo)
+            addRoad(50, 0, 0); 
 
-    let sHook = addRoad(20, 0.5, 0);
-    addProp(sHook, 'sign', -1.5);
+            let sHook = addRoad(20, 0.5, 0);
+            addProp(sHook, 'sign', -1.5);
 
-    addRoad(20, 1.5, 0);             
+            addRoad(20, 1.5, 0);             
 
-    let sApex1 = addRoad(30, 3.5, 0);
-    addProp(sApex1 + 5, 'cone', 0.9);
+            let sApex1 = addRoad(30, 3.5, 0);
+            addProp(sApex1 + 5, 'cone', 0.9);
 
-    addRoad(20, 1.0, 0);             
+            addRoad(20, 1.0, 0);             
 
-    addRoad(40, 0, 0);
+            addRoad(40, 0, 0);
 
-    let sChicane = addRoad(20, 0, 0);
-    addProp(sChicane, 'sign', 1.5); 
+            let sChicane = addRoad(20, 0, 0);
+            addProp(sChicane, 'sign', 1.5); 
 
-    addRoad(15, -2.5, 0);
-    addProp(segments.length - 5, 'cone', -0.9);
+            addRoad(15, -2.5, 0);
+            addProp(segments.length - 5, 'cone', -0.9);
 
-    addRoad(10, 0, 0);      
+            addRoad(10, 0, 0);      
 
-    addRoad(15, 2.5, 0);
-    addProp(segments.length - 5, 'cone', 0.9);
+            addRoad(15, 2.5, 0);
+            addProp(segments.length - 5, 'cone', 0.9);
 
-    addRoad(20, 0, 0);    
+            addRoad(20, 0, 0);    
 
-    let sLoop = addRoad(30, 0, 0);
-    addProp(sLoop, 'sign', 1.5);
-    addProp(sLoop + 5, 'sign', 1.5);
+            let sLoop = addRoad(30, 0, 0);
+            addProp(sLoop, 'sign', 1.5);
+            addProp(sLoop + 5, 'sign', 1.5);
 
-    addRoad(20, -1.0, 0); 
-    addRoad(60, -3.5, 0); 
-    addRoad(20, -1.0, 0); 
+            addRoad(20, -1.0, 0); 
+            addRoad(60, -3.5, 0); 
+            addRoad(20, -1.0, 0); 
 
-    let sHazards = addRoad(70, 0, 0);
-    addProp(sHazards + 15, 'cone', 0);
-    addProp(sHazards + 35, 'cone', -0.6);
-    addProp(sHazards + 55, 'cone', 0.6);
+            let sHazards = addRoad(70, 0, 0);
+            addProp(sHazards + 15, 'cone', 0);
+            addProp(sHazards + 35, 'cone', -0.6);
+            addProp(sHazards + 55, 'cone', 0.6);
 
-    addRoad(40, 1.2, 0);
+            addRoad(40, 1.2, 0);
 
-    // comprimento total da pista
-    trackLength = segments.length * SEGMENT_LENGTH;
+            // comprimento total da pista
+            trackLength = segments.length * SEGMENT_LENGTH;
 
-    // >>> PASSO 5: gerar mini mapa real da pista <<<
-    buildMiniMap(segments);
-},
+            // >>> PASSO 5: gerar mini mapa real da pista <<<
+            buildMiniMap(segments);
+        },
+
         // -------------------------------------------------------------
         // SETUP DE UI (NEW FILE - INPUT SOVEREIGNTY)
         // -------------------------------------------------------------
@@ -228,11 +230,11 @@ buildTrack: function() {
             this.state = 'race'; this.lap = 1; this.score = 0;
             this.driftState = 0; this.nitro = 100;
             
-            // Rivais com IA Humanizada (New Logic Params)
+            // Rivais com IA Humanizada e Rastreamento de Volta (Correction Applied)
             this.rivals = [
-                { pos: 1000, x: -0.4, speed: 0, color: '#2ecc71', name: 'Luigi', aggro: 0.03, mistakeProb: 0.01 },
-                { pos: 800,  x: 0.4,  speed: 0, color: '#3498db', name: 'Toad',  aggro: 0.025, mistakeProb: 0.005 },
-                { pos: 1200, x: 0,    speed: 0, color: '#e74c3c', name: 'Bowser', aggro: 0.04, mistakeProb: 0.02 }
+                { pos: 1000, lap: 1, x: -0.4, speed: 0, color: '#2ecc71', name: 'Luigi', aggro: 0.03, mistakeProb: 0.01 },
+                { pos: 800,  lap: 1, x: 0.4,  speed: 0, color: '#3498db', name: 'Toad',  aggro: 0.025, mistakeProb: 0.005 },
+                { pos: 1200, lap: 1, x: 0,    speed: 0, color: '#e74c3c', name: 'Bowser', aggro: 0.04, mistakeProb: 0.02 }
             ];
 
             window.System.msg("LARGADA!"); 
@@ -348,33 +350,30 @@ buildTrack: function() {
             // 1. Inércia (Centrífuga): Sempre ativa, empurra para fora
             // [MODIFIED] Added playerX scaling to punish bad driving
             // --- CURVAS AJUSTADAS REALISTICAMENTE ---
-// Centrífuga suavizada com scaling por posição
-const centrifugal = -seg.curve * (speedRatio * speedRatio) * (CONF.CENTRIFUGAL_FORCE * 0.5); 
-// 0.5 reduz efeito geral
+            // Centrífuga suavizada com scaling por posição
+            const centrifugal = -seg.curve * (speedRatio * speedRatio) * (CONF.CENTRIFUGAL_FORCE * 0.5); 
+            // 0.5 reduz efeito geral
 
-let dynamicGrip = CONF.GRIP_CARVING * 0.65; 
-if(Math.abs(d.steer) < 0.05) dynamicGrip = 0;
-if(d.driftState === 1) dynamicGrip = CONF.GRIP_DRIFT * 0.75; 
+            let dynamicGrip = CONF.GRIP_CARVING * 0.65; 
+            if(Math.abs(d.steer) < 0.05) dynamicGrip = 0;
+            if(d.driftState === 1) dynamicGrip = CONF.GRIP_DRIFT * 0.75; 
 
-// Scaling por posição para suavizar puxão se perto da borda
-const edgeFactor = 1 - Math.min(Math.abs(d.playerX) / 4.5, 0.8); 
+            // Scaling por posição para suavizar puxão se perto da borda
+            const edgeFactor = 1 - Math.min(Math.abs(d.playerX) / 4.5, 0.8); 
 
-const playerForce =
-    d.steer *
-    CONF.STEER_AUTHORITY *
-    dynamicGrip *
-    speedRatio *
-    0.9 *
-    edgeFactor;
+            const playerForce =
+                d.steer *
+                CONF.STEER_AUTHORITY *
+                dynamicGrip *
+                speedRatio *
+                0.9 *
+                edgeFactor;
 
-// Cancela parte da centrífuga quando o jogador está corrigindo a curva
-const counterSteerFactor = 1 - Math.min(Math.abs(d.steer), 0.9);
-const correctedCentrifugal = centrifugal * counterSteerFactor;
+            // Cancela parte da centrífuga quando o jogador está corrigindo a curva
+            const counterSteerFactor = 1 - Math.min(Math.abs(d.steer), 0.9);
+            const correctedCentrifugal = centrifugal * counterSteerFactor;
 
-d.playerX += playerForce + correctedCentrifugal * edgeFactor;
-
-
-
+            d.playerX += playerForce + correctedCentrifugal * edgeFactor;
 
             // Limites da Pista
             if(d.playerX < -4.5) { d.playerX = -4.5; d.speed *= 0.95; }
@@ -408,49 +407,51 @@ d.playerX += playerForce + correctedCentrifugal * edgeFactor;
             // --- D. COLISÃO DETERMINÍSTICA ---
             // Verifica obstáculos no segmento atual e no próximo (Lookahead curto)
             const hitbox = 0.22; // hitbox realista, alinhada ao sprite
-for(let i=0; i<1; i++) { // apenas segmento atual
-
-    const checkIdx = (segIdx + i) % segments.length;
-    const checkSeg = segments[checkIdx];
-    checkSeg.obs.forEach(o => {
-        if(o.x > 10) return; // ignorar obstáculos removidos
-        // colisão só se jogador estiver dentro da faixa visível da estrada
-        if(Math.abs(d.playerX - o.x) < hitbox && Math.abs(d.playerX) < 4.5) {
-            d.speed *= CONF.CRASH_PENALTY;
-            d.stats.crashes++;
-            o.x = 999;
-            d.bounce = -15;
-            window.Sfx.crash();
-            window.Gfx.shake(15);
-        }
-    });
-}
+            for(let i=0; i<1; i++) { // apenas segmento atual
+                const checkIdx = (segIdx + i) % segments.length;
+                const checkSeg = segments[checkIdx];
+                checkSeg.obs.forEach(o => {
+                    if(o.x > 10) return; // ignorar obstáculos removidos
+                    // colisão só se jogador estiver dentro da faixa visível da estrada
+                    if(Math.abs(d.playerX - o.x) < hitbox && Math.abs(d.playerX) < 4.5) {
+                        d.speed *= CONF.CRASH_PENALTY;
+                        d.stats.crashes++;
+                        o.x = 999;
+                        d.bounce = -15;
+                        window.Sfx.crash();
+                        window.Gfx.shake(15);
+                    }
+                });
+            }
 
 
             // --- E. LOOP & RIVAIS ---
             d.pos += d.speed;
             while (d.pos >= trackLength) {
-    d.pos -= trackLength;
-    d.lap++;
+                d.pos -= trackLength;
+                d.lap++;
 
-    // POPUP DE VOLTA
-    if (d.lap <= d.totalLaps) {
-        lapPopupText = `VOLTA ${d.lap}/${d.totalLaps}`;
-        lapPopupTimer = 120; // duração do aviso
-        window.System.msg(lapPopupText);
-    }
+                // POPUP DE VOLTA
+                if (d.lap <= d.totalLaps) {
+                    lapPopupText = `VOLTA ${d.lap}/${d.totalLaps}`;
+                    lapPopupTimer = 120; // duração do aviso
+                    window.System.msg(lapPopupText);
+                }
 
-    if(d.lap > d.totalLaps && d.state === 'race') {
-        d.state = 'finished';
-        window.System.msg(d.rank === 1 ? "VITÓRIA!" : "FIM!");
-        if(d.rank===1) window.Sfx.play(1000,'square',0.5,1);
-    }
-}
+                if(d.lap > d.totalLaps && d.state === 'race') {
+                    d.state = 'finished';
+                    window.System.msg(d.rank === 1 ? "VITÓRIA!" : "FIM!");
+                    if(d.rank===1) window.Sfx.play(1000,'square',0.5,1);
+                }
+            }
 
             while(d.pos < 0) d.pos += trackLength;
 
             // Atualiza Rivais
             let pAhead = 0;
+            // Distância ABSOLUTA do Jogador para cálculo correto de Rank
+            const playerAbsDist = (d.lap - 1) * trackLength + d.pos;
+
             d.rivals.forEach(r => {
                 let dist = r.pos - d.pos;
                 if(dist > trackLength/2) dist -= trackLength;
@@ -463,19 +464,25 @@ for(let i=0; i<1; i++) { // apenas segmento atual
                 
                 r.speed += (targetS - r.speed) * r.aggro;
                 r.pos += r.speed;
-                if(r.pos >= trackLength) r.pos -= trackLength;
+
+                // Loop Rival e Correção de Volta
+                if(r.pos >= trackLength) {
+                    r.pos -= trackLength;
+                    r.lap++;
+                }
+                if(r.pos < 0) { // Edge case reverso
+                     r.pos += trackLength;
+                     r.lap--; 
+                }
 
                 const rSeg = segments[Math.floor(r.pos/SEGMENT_LENGTH)%segments.length];
                 let idealLine = -(rSeg.curve * 0.6);
                 if (Math.random() < r.mistakeProb) idealLine = -(rSeg.curve * -0.5); // Erro humano
                 r.x += (idealLine - r.x) * 0.05;
 
-                let playerTotal = d.pos + (d.lap * trackLength);
-let rivalTotal = r.pos + ((d.lap - 1) * trackLength);
-
-
-if (rivalTotal > playerTotal) pAhead++;
-
+                // Cálculo de Rank baseado em distância total percorrida (voltas + pos)
+                const rivalAbsDist = (r.lap - 1) * trackLength + r.pos;
+                if (rivalAbsDist > playerAbsDist) pAhead++;
             });
             d.rank = 1 + pAhead;
 
@@ -685,202 +692,218 @@ if (rivalTotal > playerTotal) pAhead++;
         // UI VISUAL (OLD FILE - BETTER AESTHETICS)
         // -------------------------------------------------------------
         renderUI: function(ctx, w, h) {
-    const d = Logic;
+            const d = Logic;
 
-    if (d.state === 'race') {
+            if (d.state === 'race') {
 
-        // =========================
-        // POPUP CENTRAL DE VOLTA
-        // =========================
-        if (lapPopupTimer > 0) {
-            ctx.save();
-            ctx.globalAlpha = Math.min(1, lapPopupTimer / 30);
-            ctx.fillStyle = '#00ffff';
-            ctx.font = "bold 48px 'Russo One'";
-            ctx.textAlign = 'center';
-            ctx.fillText(lapPopupText, w / 2, h * 0.45);
-            ctx.restore();
-            lapPopupTimer--;
+                // =========================
+                // POPUP CENTRAL DE VOLTA
+                // =========================
+                if (lapPopupTimer > 0) {
+                    ctx.save();
+                    ctx.globalAlpha = Math.min(1, lapPopupTimer / 30);
+                    ctx.fillStyle = '#00ffff';
+                    ctx.font = "bold 48px 'Russo One'";
+                    ctx.textAlign = 'center';
+                    ctx.fillText(lapPopupText, w / 2, h * 0.45);
+                    ctx.restore();
+                    lapPopupTimer--;
+                }
+
+                // =========================
+                // VOLTAS (EMBAIXO)
+                // =========================
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.fillRect(20, h - 50, 120, 30);
+                ctx.fillStyle = '#fff';
+                ctx.font = "bold 14px Arial";
+                ctx.fillText(`VOLTA ${d.lap}/${d.totalLaps}`, 30, h - 30);
+
+                // =========================
+                // VELOCÍMETRO
+                // =========================
+                const hudX = w - 80;
+                const hudY = h - 60;
+
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.beginPath();
+                ctx.arc(hudX, hudY, 55, 0, Math.PI * 2);
+                ctx.fill();
+
+                const rpm = Math.min(1, d.speed / CONF.TURBO_MAX_SPEED);
+                ctx.beginPath();
+                ctx.arc(hudX, hudY, 50, Math.PI, Math.PI + Math.PI * rpm);
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = (d.turboLock || d.boostTimer > 0) ? '#00ffff' : '#ff3300';
+                ctx.stroke();
+
+                ctx.fillStyle = '#fff';
+                ctx.textAlign = 'center';
+                ctx.font = "bold 36px 'Russo One'";
+                ctx.fillText(Math.floor(d.speed), hudX, hudY + 10);
+                ctx.font = "10px Arial";
+                const totalRacers = d.rivals.length + 1;
+                ctx.font = "bold 14px Arial";
+                ctx.fillText(`POSIÇÃO`, hudX, hudY + 22);
+                ctx.font = "bold 18px 'Russo One'";
+                ctx.fillText(`${d.rank} / ${totalRacers}`, hudX, hudY + 42);
+                // =========================
+                // BARRA NITRO
+                // =========================
+                const nW = 220;
+                ctx.fillStyle = '#111';
+                ctx.fillRect(w / 2 - nW / 2, 20, nW, 20);
+                ctx.fillStyle = d.turboLock ? '#00ffff' : (d.nitro > 20 ? '#00aa00' : '#ff3300');
+                ctx.fillRect(w / 2 - nW / 2 + 2, 22, (nW - 4) * (d.nitro / 100), 16);
+
+                if (!minimapPoints || minimapPoints.length < 2) return;
+
+                // =========================
+                // MINI MAPA REAL (CORRIGIDO: ESCALA E POSIÇÃO DOS PONTOS)
+                // =========================
+                const mapSize = 120;
+                const mapX = 20;
+                const mapY = 90;
+                
+                // fundo
+                ctx.save();
+                ctx.globalAlpha = 0.6;
+                ctx.fillStyle = '#000';
+                ctx.fillRect(mapX - 6, mapY - 6, mapSize + 12, mapSize + 12);
+                ctx.globalAlpha = 1;
+
+                // viewport clip
+                ctx.beginPath();
+                ctx.rect(mapX, mapY, mapSize, mapSize);
+                ctx.clip();
+
+                // Calcular bounds para centralização perfeita
+                const bounds = minimapPoints.reduce((b, p) => ({
+                    minX: Math.min(b.minX, p.x),
+                    maxX: Math.max(b.maxX, p.x),
+                    minY: Math.min(b.minY, p.y),
+                    maxY: Math.max(b.maxY, p.y),
+                }), {
+                    minX: Infinity, maxX: -Infinity,
+                    minY: Infinity, maxY: -Infinity
+                });
+
+                // Escala para caber no box
+                const scale = Math.min(
+                    mapSize / (bounds.maxX - bounds.minX),
+                    mapSize / (bounds.maxY - bounds.minY)
+                ) * 0.85;
+
+                // Translação para o centro do box
+                ctx.translate(
+                    mapX + mapSize / 2,
+                    mapY + mapSize / 2
+                );
+                ctx.scale(scale, scale);
+                
+                // [CORREÇÃO] Mapa estático ou com rotação fixa para evitar vertigem
+                // Removemos a rotação baseada na curva do segmento que causava jitter
+                ctx.translate(
+                    -(bounds.minX + bounds.maxX) / 2,
+                    -(bounds.minY + bounds.maxY) / 2
+                );
+
+                // Desenha a linha da pista
+                ctx.strokeStyle = '#aaa';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                minimapPoints.forEach((p, i) => {
+                    if (i === 0) ctx.moveTo(p.x, p.y);
+                    else ctx.lineTo(p.x, p.y);
+                });
+                ctx.closePath();
+                ctx.stroke();
+
+                // [CORREÇÃO] Mapeamento preciso do Jogador no Mapa
+                // Usar d.pos / SEGMENT_LENGTH para pegar o índice exato do ponto geometry
+                let pIndex = Math.floor(d.pos / SEGMENT_LENGTH);
+                // Wrap safe
+                pIndex = (pIndex % minimapPoints.length + minimapPoints.length) % minimapPoints.length;
+                
+                const pPoint = minimapPoints[pIndex];
+                if (pPoint) {
+                    ctx.fillStyle = '#00ffff';
+                    ctx.beginPath();
+                    ctx.arc(pPoint.x, pPoint.y, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Indicador de direção simples (opcional)
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(pPoint.x, pPoint.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // [CORREÇÃO] Mapeamento preciso dos Rivais no Mapa
+                d.rivals.forEach(r => {
+                    let rIndex = Math.floor(r.pos / SEGMENT_LENGTH);
+                    rIndex = (rIndex % minimapPoints.length + minimapPoints.length) % minimapPoints.length;
+                    
+                    const rPoint = minimapPoints[rIndex];
+                    if (rPoint) {
+                        ctx.fillStyle = r.color;
+                        ctx.beginPath();
+                        ctx.arc(rPoint.x, rPoint.y, 5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                });
+
+                ctx.restore();
+
+                // =========================
+                // VOLANTE VIRTUAL ESPORTIVO
+                // =========================
+                if (d.virtualWheel.opacity > 0.01) {
+                    const vw = d.virtualWheel;
+
+                    ctx.save();
+                    ctx.globalAlpha = vw.opacity;
+                    ctx.translate(vw.x, vw.y);
+
+                    ctx.lineWidth = 8;
+                    ctx.strokeStyle = '#222';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, vw.r, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    ctx.lineWidth = 4;
+                    ctx.strokeStyle = '#00ffff';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, vw.r - 8, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    ctx.rotate(d.steer * 1.4);
+                    ctx.fillStyle = '#ff3300';
+                    ctx.fillRect(-4, -vw.r + 10, 8, 22);
+
+                    ctx.fillStyle = '#111';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 10, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.restore();
+                    ctx.globalAlpha = 1;
+                }
+
+            } else {
+
+                // =========================
+                // TELA FINAL
+                // =========================
+                ctx.fillStyle = "rgba(0,0,0,0.85)";
+                ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = "#fff";
+                ctx.textAlign = "center";
+
+                const title = d.rank === 1 ? "VITÓRIA!" : `${d.rank}º LUGAR`;
+                ctx.font = "bold 60px 'Russo One'";
+                ctx.fillText(title, w / 2, h * 0.3);
+            }
         }
-
-        // =========================
-        // VOLTAS (EMBAIXO)
-        // =========================
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(20, h - 50, 120, 30);
-        ctx.fillStyle = '#fff';
-        ctx.font = "bold 14px Arial";
-        ctx.fillText(`VOLTA ${d.lap}/${d.totalLaps}`, 30, h - 30);
-
-        // =========================
-        // VELOCÍMETRO
-        // =========================
-        const hudX = w - 80;
-        const hudY = h - 60;
-
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.beginPath();
-        ctx.arc(hudX, hudY, 55, 0, Math.PI * 2);
-        ctx.fill();
-
-        const rpm = Math.min(1, d.speed / CONF.TURBO_MAX_SPEED);
-        ctx.beginPath();
-        ctx.arc(hudX, hudY, 50, Math.PI, Math.PI + Math.PI * rpm);
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = (d.turboLock || d.boostTimer > 0) ? '#00ffff' : '#ff3300';
-        ctx.stroke();
-
-        ctx.fillStyle = '#fff';
-        ctx.textAlign = 'center';
-        ctx.font = "bold 36px 'Russo One'";
-        ctx.fillText(Math.floor(d.speed), hudX, hudY + 10);
-        ctx.font = "10px Arial";
-        const totalRacers = d.rivals.length + 1;
-ctx.font = "bold 14px Arial";
-ctx.fillText(`POSIÇÃO`, hudX, hudY + 22);
-ctx.font = "bold 18px 'Russo One'";
-ctx.fillText(`${d.rank} / ${totalRacers}`, hudX, hudY + 42);
-        // =========================
-        // BARRA NITRO
-        // =========================
-        const nW = 220;
-        ctx.fillStyle = '#111';
-        ctx.fillRect(w / 2 - nW / 2, 20, nW, 20);
-        ctx.fillStyle = d.turboLock ? '#00ffff' : (d.nitro > 20 ? '#00aa00' : '#ff3300');
-        ctx.fillRect(w / 2 - nW / 2 + 2, 22, (nW - 4) * (d.nitro / 100), 16);
-
-        if (!minimapPoints || minimapPoints.length < 2) return;
-
-        // =========================
-// MINI MAPA REAL DA PISTA
-// =========================
-// =========================
-// MINI MAPA REAL (COMPACTO E FIXO)
-// =========================
-const mapSize = 120;
-// canto superior esquerdo (não conflita com nada)
-const mapX = 20;
-const mapY = 90;
-// fundo
-ctx.save();
-ctx.globalAlpha = 0.6;
-ctx.fillStyle = '#000';
-ctx.fillRect(mapX - 6, mapY - 6, mapSize + 12, mapSize + 12);
-ctx.globalAlpha = 1;
-
-// viewport
-ctx.beginPath();
-ctx.rect(mapX, mapY, mapSize, mapSize);
-ctx.clip();
-
-// normalização
-const bounds = minimapPoints.reduce((b, p) => ({
-    minX: Math.min(b.minX, p.x),
-    maxX: Math.max(b.maxX, p.x),
-    minY: Math.min(b.minY, p.y),
-    maxY: Math.max(b.maxY, p.y),
-}), {
-    minX: Infinity, maxX: -Infinity,
-    minY: Infinity, maxY: -Infinity
-});
-
-const scale = Math.min(
-    mapSize / (bounds.maxX - bounds.minX),
-    mapSize / (bounds.maxY - bounds.minY)
-) * 0.85;
-
-ctx.translate(
-    mapX + mapSize / 2,
-    mapY + mapSize / 2
-);
-ctx.scale(scale, scale);
-// rotação do mapa conforme a curva atual da pista
-const segIdxMap = Math.floor(d.pos / SEGMENT_LENGTH) % segments.length;
-const segMap = segments[segIdxMap];
-ctx.rotate(-segMap.curve * 0.8);
-ctx.translate(
-    -(bounds.minX + bounds.maxX) / 2,
-    -(bounds.minY + bounds.maxY) / 2
-);
-
-// pista
-ctx.strokeStyle = '#aaa';
-ctx.lineWidth = 2;
-ctx.beginPath();
-minimapPoints.forEach((p, i) => {
-    if (i === 0) ctx.moveTo(p.x, p.y);
-    else ctx.lineTo(p.x, p.y);
-});
-ctx.stroke();
-
-// jogador
-const pi = Math.floor((d.pos / trackLength) * minimapPoints.length) % minimapPoints.length;
-ctx.fillStyle = '#00ffff';
-ctx.beginPath();
-ctx.arc(minimapPoints[pi].x, minimapPoints[pi].y, 5, 0, Math.PI * 2);
-ctx.fill();
-
-// rivais
-d.rivals.forEach(r => {
-    const ri = Math.floor((r.pos / trackLength) * minimapPoints.length) % minimapPoints.length;
-    ctx.fillStyle = r.color;
-    ctx.beginPath();
-    ctx.arc(minimapPoints[ri].x, minimapPoints[ri].y, 4, 0, Math.PI * 2);
-    ctx.fill();
-});
-
-ctx.restore();
-
-        // =========================
-        // VOLANTE VIRTUAL ESPORTIVO
-        // =========================
-        if (d.virtualWheel.opacity > 0.01) {
-            const vw = d.virtualWheel;
-
-            ctx.save();
-            ctx.globalAlpha = vw.opacity;
-            ctx.translate(vw.x, vw.y);
-
-            ctx.lineWidth = 8;
-            ctx.strokeStyle = '#222';
-            ctx.beginPath();
-            ctx.arc(0, 0, vw.r, 0, Math.PI * 2);
-            ctx.stroke();
-
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = '#00ffff';
-            ctx.beginPath();
-            ctx.arc(0, 0, vw.r - 8, 0, Math.PI * 2);
-            ctx.stroke();
-
-            ctx.rotate(d.steer * 1.4);
-            ctx.fillStyle = '#ff3300';
-            ctx.fillRect(-4, -vw.r + 10, 8, 22);
-
-            ctx.fillStyle = '#111';
-            ctx.beginPath();
-            ctx.arc(0, 0, 10, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.restore();
-            ctx.globalAlpha = 1;
-        }
-
-    } else {
-
-        // =========================
-        // TELA FINAL
-        // =========================
-        ctx.fillStyle = "rgba(0,0,0,0.85)";
-        ctx.fillRect(0, 0, w, h);
-        ctx.fillStyle = "#fff";
-        ctx.textAlign = "center";
-
-        const title = d.rank === 1 ? "VITÓRIA!" : `${d.rank}º LUGAR`;
-        ctx.font = "bold 60px 'Russo One'";
-        ctx.fillText(title, w / 2, h * 0.3);
-    }
-}
 
     };
 
