@@ -316,14 +316,14 @@ const steerDiff = d.targetSteer - d.steer;
 const speedFactor = Math.min(d.speed / CONF.MAX_SPEED, 1);
 
 // Retorno natural do volante (auto-centralização)
-const wheelReturn = -d.steer * (0.04 + speedFactor * 0.06);
+const wheelReturn = -d.steer * (0.015 + speedFactor * 0.025);
 
 // Resposta direta ao input, sem flutuação
-d.steer += steerDiff * (0.35 - speedFactor * 0.18);
+d.steer += steerDiff * (0.48 - speedFactor * 0.22);
 d.steer += wheelReturn;
 
 // Limite físico de esterçamento (Mario Kart style)
-d.steer = Math.max(-1.0, Math.min(1.0, d.steer));
+d.steer = Math.max(-1.25, Math.min(1.25, d.steer));
 
             if(nitroBtn) nitroBtn.style.opacity = (detected > 0) ? 0.3 : 1.0;
 
