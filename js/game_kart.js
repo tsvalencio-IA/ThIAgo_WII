@@ -1,921 +1,995 @@
-// =============================================================================
-// MÓDULO DE FÍSICA E LÓGICA: OTTO KART SUPER RUN
-// VERSÃO: 2.0 (GOLD MASTER) - ENGENHEIRO: CODE 177
-// DESCRIÇÃO: Módulo de substituição hot-swap. Mantém renderização "Legacy"
-// mas substitui completamente o kernel de física, input e inteligência artificial.
-// =============================================================================
+// =====================================================
+// OTTO SUPER RUN KART – COMMERCIAL GOLD MASTER
+// VERSÃO: 2.0 (ENHANCED PHYSICS & HUD)
+// ENGINEER: CODE 177
+// =====================================================
 
 (function() {
-    "use strict";
 
-    // =========================================================================
-    // 1. CONFIGURAÇÕES DE ENGENHARIA (TUNING)
-    // =========================================================================
+    // =================================================================
+    // 0. CONSTANTES & CONFIGURAÇÃO (TUNING COMERCIAL)
+    // =================================================================
     const CONF = {
         // --- Física de Motor ---
-        MAX_SPEED: 235,          // Velocidade cruzeiro (km/h simulados)
-        TURBO_MAX_SPEED: 420,    // Velocidade com Nitro/Boost
-        ACCEL: 1.5,              // Curva de aceleração
-        FRICTION: 0.985,         // Resistência do ar/chão
-        OFFROAD_DECEL: 0.93,     // Penalidade severa fora da pista
+        MAX_SPEED: 240,          // Velocidade terminal padrão
+        TURBO_MAX_SPEED: 460,    // Velocidade durante Nitro
+        ACCEL: 1.8,              // Curva de aceleração mais agressiva
+        FRICTION: 0.98,          // Resistência do ar/solo
+        BRAKING: 0.95,           // Força de frenagem
+        OFFROAD_DECEL: 0.92,     // Penalidade fora da pista
         
-        // --- Física de Direção (Handling) ---
-        CENTRIFUGAL_FORCE: 0.19, // Força que joga o carro para fora na curva
-        STEER_AUTHORITY: 0.18,   // Responsividade do volante
-        GRIP_CARVING: 1.25,      // Bônus de tração ao fazer a curva corretamente
-        GRIP_DRIFT: 0.94,        // Perda leve de tração durante drift
-        
-        // --- Gameplay & Colisão ---
-        HITBOX_WIDTH: 0.4,       // Largura do kart para colisões
-        CRASH_PENALTY: 0.55,     // Fator de velocidade após batida (55% do original)
-        
-        // --- Input System ---
-        DEADZONE: 0.05,          // Zona morta para evitar tremores no input
-        INPUT_SMOOTHING: 0.22,   // Suavização para inputs de gesto (lerp)
-        TURBO_ZONE_Y: 0.35,      // % da tela (topo) para ativar nitro via gesto
-        
-        // --- Renderização (Compatibilidade Legacy) ---
-        DRAW_DISTANCE: 60,       // Distância de desenho de segmentos
-        FOV: 100                 // Campo de visão
+        // --- Física de Direção & Drift ---
+        CENTRIFUGAL_FORCE: 0.35, // Força que joga o carro para fora na curva
+        STEER_AUTHORITY: 0.15,   // Resposta do volante
+        DRIFT_GRIP: 0.96,        // Perda leve de tração no drift
+        DRIFT_BONUS_TURN: 1.4,   // Capacidade de curvar mais fechado no drift
+        MINI_TURBO_1: 45,        // Frames para carga nível 1 (Azul)
+        MINI_TURBO_2: 100,       // Frames para carga nível 2 (Laranja)
+
+        // --- Gameplay ---
+        HITBOX_WIDTH: 0.5,       // Largura para colisão
+        CRASH_PENALTY: 0.4,      // Multiplicador de velocidade após batida
+        TOTAL_LAPS: 3,           // Total de voltas
+
+        // --- Visual ---
+        DRAW_DISTANCE: 70,       // Distância de renderização (segmentos)
+        FOV: 100,
+        PARTICLE_LIMIT: 100      // Limite para manter 60 FPS
     };
 
-    // =========================================================================
-    // 2. VARIÁVEIS DE ESTADO (SCOPE SAFE)
-    // =========================================================================
-    
-    // Sistema de Partículas (Drift, Fumaça, Explosões)
-    let particles = [];
-    
-    // Elementos de UI DOM
+    // Variáveis Globais de Escopo Seguro
     let nitroBtn = null;
+    let particles = [];
+    let keys = {}; // Estado do teclado
     
-    // Estado da Pista e Navegação
-    const SEGMENT_LENGTH = 200; 
-    const RUMBLE_LENGTH = 3;    
+    // Cache de Pista e Mapa
+    const SEGMENT_LENGTH = 200;
+    const RUMBLE_LENGTH = 3;
     let segments = [];
     let trackLength = 0;
-    
-    // Mini Mapa
     let minimapPoints = [];
-    
-    // Input de Fallback (Teclado/Mouse)
-    const inputStatus = {
-        left: false, right: false, up: false, down: false,
-        mouseX: 0, mouseY: 0, usingMouse: false
-    };
+    let trackCurvatureSum = 0; // Para rotação do mapa
 
-    // =========================================================================
-    // 3. FUNÇÕES AUXILIARES GLOBAIS
-    // =========================================================================
+    // =================================================================
+    // 1. SISTEMAS AUXILIARES (PARTÍCULAS & INPUT)
+    // =================================================================
 
-    // Gera coordenadas para o minimapa baseado na curvatura dos segmentos
-    function buildMiniMap(segmentsList) {
-        minimapPoints = [];
-        let x = 0;
-        let y = 0;
-        let dir = -Math.PI / 2; // Começa apontando para cima
+    // Listener de Teclado (Fallback se não houver Pose)
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
 
-        segmentsList.forEach(seg => {
-            dir += seg.curve * 0.002;
-            x += Math.cos(dir) * 4;
-            y += Math.sin(dir) * 4;
-            minimapPoints.push({ x, y });
+    // Sistema de Partículas Otimizado
+    function spawnParticle(x, y, type, color) {
+        if (particles.length > CONF.PARTICLE_LIMIT) particles.shift(); // Remove antigas
+        particles.push({
+            x: x, y: y,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10 - 2,
+            life: 1.0,
+            decay: 0.03 + Math.random() * 0.02,
+            type: type, // 'smoke', 'fire', 'spark'
+            color: color
         });
     }
 
-    // Listeners de Teclado e Mouse para compatibilidade híbrida
-    window.addEventListener('keydown', (e) => {
-        if(e.key === 'ArrowLeft' || e.key === 'a') inputStatus.left = true;
-        if(e.key === 'ArrowRight' || e.key === 'd') inputStatus.right = true;
-        if(e.key === 'ArrowUp' || e.key === 'w') inputStatus.up = true;
-        if(e.key === 'ArrowDown' || e.key === 's') inputStatus.down = true;
-        if(e.key === ' ' || e.key === 'Enter') Logic.activateNitro(); 
-    });
-    window.addEventListener('keyup', (e) => {
-        if(e.key === 'ArrowLeft' || e.key === 'a') inputStatus.left = false;
-        if(e.key === 'ArrowRight' || e.key === 'd') inputStatus.right = false;
-        if(e.key === 'ArrowUp' || e.key === 'w') inputStatus.up = false;
-        if(e.key === 'ArrowDown' || e.key === 's') inputStatus.down = false;
-    });
-    window.addEventListener('mousemove', (e) => {
-        inputStatus.usingMouse = true;
-        inputStatus.mouseX = e.clientX;
-        inputStatus.mouseY = e.clientY;
-    });
+    // Gerador de Mini-Mapa (Pré-cálculo)
+    function buildMiniMap(segments) {
+        minimapPoints = [];
+        let x = 0, y = 0, dir = 0;
+        
+        // Passo de precisão para o mapa ficar suave
+        segments.forEach(seg => {
+            dir += seg.curve * 0.0025; // Escala de curvatura
+            x += Math.sin(dir) * 2;
+            y += Math.cos(dir) * 2;
+            minimapPoints.push({ x, y, dir }); // Salva direção para rotação
+        });
+    }
 
-    // =========================================================================
-    // 4. OBJETO LÓGICO PRINCIPAL (GAME CORE)
-    // =========================================================================
+    // =================================================================
+    // 2. LÓGICA DO JOGO (STATE CONTAINER)
+    // =================================================================
     const Logic = {
+        // --- Estado Físico ---
+        speed: 0,
+        pos: 0,
+        playerX: 0,
+        steer: 0,
+        targetSteer: 0,
         
-        // --- Estado do Jogador ---
-        speed: 0,           // Velocidade atual
-        pos: 0,             // Posição Z na pista
-        playerX: 0,         // Posição X (-1 a 1 é pista, >1 offroad)
-        steer: 0,           // Direção atual (-1 a 1)
-        targetSteer: 0,     // Direção alvo (para suavização)
-        
-        // --- Mecânicas de Corrida ---
-        nitro: 100,         // Tanque de nitro (0-100)
-        turboLock: false,   // Se o turbo está ativo
-        driftState: 0,      // 0: Normal, 1: Drifting
-        driftDir: 0,        // -1 (Esquerda) ou 1 (Direita)
-        driftCharge: 0,     // Carga do Mini-Turbo
-        mtStage: 0,         // Nível do Mini-Turbo (0, 1=Azul, 2=Laranja)
-        boostTimer: 0,      // Frames restantes de boost de velocidade
-        
-        // --- Metadados da Corrida ---
-        state: 'race',      // 'race' ou 'finished'
-        finishTimer: 0,     // Timer pós-corrida
-        lap: 1,             
-        totalLaps: 3,
-        time: 0, 
-        rank: 1, 
+        // --- Estado de Gameplay ---
+        state: 'race', // 'race', 'finished'
+        lap: 1,
+        totalLaps: CONF.TOTAL_LAPS,
+        rank: 1,
+        time: 0,
         score: 0,
+        finishTimer: 0,
+
+        // --- Mecânicas Especiais ---
+        nitro: 100,
+        turboLock: false,
+        boostTimer: 0,
         
-        // --- Visuais & Feedback ---
-        visualTilt: 0,      // Inclinação visual do chassi
-        bounce: 0,          // Salto vertical (pulo/colisão)
-        skyColor: 0,        // Variação do céu (dia/tarde)
-        stats: { drifts: 0, overtakes: 0, crashes: 0 },
-        
+        // Drift State
+        driftState: 0, // 0=Normal, 1=Drifting
+        driftDir: 0,   // -1 Esquerda, 1 Direita
+        driftCharge: 0,
+        mtStage: 0,    // 0=Nenhum, 1=Azul, 2=Laranja
+
+        // --- Visual FX ---
+        bounce: 0,
+        visualTilt: 0,
+        skyColor: 0,
+        shake: 0,
+        lapPopupTimer: 0,
+        lapPopupText: "",
+
         // --- Input ---
-        inputState: 0,      // 0: Nenhum, 1: Teclado/Mouse, 2: Gesto
-        gestureTimer: 0,    // Timer para detecção de gesto de turbo
-        virtualWheel: { x:0, y:0, r:0, opacity:0 }, // UI do volante virtual
-        
-        // --- Inteligência Artificial ---
+        inputState: 0, // 0=None, 1=Key/Mouse, 2=Pose
+        virtualWheel: { x:0, y:0, r:0, opacity:0 },
+        gestureTimer: 0,
+
+        // --- IA ---
         rivals: [],
 
-        // ---------------------------------------------------------------------
-        // CONSTRUÇÃO DA PISTA (LAYOUT ORIGINAL PRESERVADO)
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------
+        // CONSTRUÇÃO DA PISTA (PRESERVED ASSETS)
+        // -------------------------------------------------------------
         buildTrack: function() {
             segments = [];
-            
-            // Helper para criar segmentos de estrada
             const addRoad = (enter, curve, y) => {
                 const startIdx = segments.length;
                 for(let i = 0; i < enter; i++) {
                     const isDark = Math.floor(segments.length / RUMBLE_LENGTH) % 2;
                     segments.push({
-                        curve: curve,
-                        y: y,
+                        curve: curve, y: y,
                         color: isDark ? 'dark' : 'light',
-                        obs: [] // Obstáculos
+                        obs: []
                     });
                 }
                 return startIdx;
             };
 
-            // Helper para adicionar props (obstáculos/decoração)
             const addProp = (index, type, offset) => {
-                if (segments[index]) {
-                    segments[index].obs.push({ type: type, x: offset });
-                }
+                if (segments[index]) segments[index].obs.push({ type: type, x: offset });
             };
 
-            // === LAYOUT "OTTO CIRCUIT" ===
-            addRoad(50, 0, 0); // Reta de largada
-
-            let sHook = addRoad(20, 0.5, 0);
-            addProp(sHook, 'sign', -1.5);
-
+            // --- Layout "Otto Circuit" ---
+            addRoad(50, 0, 0); 
+            let sHook = addRoad(20, 0.5, 0); addProp(sHook, 'sign', -1.5);
             addRoad(20, 1.5, 0);              
-
-            let sApex1 = addRoad(30, 3.5, 0); // Curva forte direita
-            addProp(sApex1 + 5, 'cone', 0.9);
-
+            let sApex1 = addRoad(30, 3.5, 0); addProp(sApex1 + 5, 'cone', 0.9);
             addRoad(20, 1.0, 0);              
-
-            addRoad(40, 0, 0); // Reta
-
-            let sChicane = addRoad(20, 0, 0);
-            addProp(sChicane, 'sign', 1.5); 
-
-            addRoad(15, -2.5, 0); // Chicane esquerda
-            addProp(segments.length - 5, 'cone', -0.9);
-
+            addRoad(40, 0, 0);
+            let sChicane = addRoad(20, 0, 0); addProp(sChicane, 'sign', 1.5); 
+            addRoad(15, -2.5, 0); addProp(segments.length - 5, 'cone', -0.9);
             addRoad(10, 0, 0);       
-
-            addRoad(15, 2.5, 0); // Chicane direita
-            addProp(segments.length - 5, 'cone', 0.9);
-
+            addRoad(15, 2.5, 0); addProp(segments.length - 5, 'cone', 0.9);
             addRoad(20, 0, 0);    
-
-            let sLoop = addRoad(30, 0, 0);
-            addProp(sLoop, 'sign', 1.5);
-            addProp(sLoop + 5, 'sign', 1.5);
-
+            let sLoop = addRoad(30, 0, 0); addProp(sLoop, 'sign', 1.5); addProp(sLoop + 5, 'sign', 1.5);
             addRoad(20, -1.0, 0); 
-            addRoad(60, -3.5, 0); // Longa curva esquerda
+            addRoad(60, -3.5, 0); 
             addRoad(20, -1.0, 0); 
+            let sHazards = addRoad(70, 0, 0);
+            addProp(sHazards + 15, 'cone', 0); addProp(sHazards + 35, 'cone', -0.6); addProp(sHazards + 55, 'cone', 0.6);
+            addRoad(40, 1.2, 0);
 
-            let sHazards = addRoad(70, 0, 0); // Reta final com obstáculos
-            addProp(sHazards + 15, 'cone', 0);
-            addProp(sHazards + 35, 'cone', -0.6);
-            addProp(sHazards + 55, 'cone', 0.6);
-
-            addRoad(40, 1.2, 0); // Curva para a meta
-
-            // Calcula tamanho total e gera o minimapa
             trackLength = segments.length * SEGMENT_LENGTH;
-            buildMiniMap(segments);
+            buildMiniMap(segments); // Gera o mapa vetorial
         },
 
-        // ---------------------------------------------------------------------
-        // CONFIGURAÇÃO DE INTERFACE (BOTÃO NITRO & UI)
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------
+        // SETUP UI (BOTÕES E INTERFACE)
+        // -------------------------------------------------------------
         setupUI: function() {
-            // Limpeza de UI anterior para evitar duplicatas
             const oldBtn = document.getElementById('nitro-btn-kart');
             if(oldBtn) oldBtn.remove();
 
-            // Criação do botão Nitro (Touch/Click)
             nitroBtn = document.createElement('div');
             nitroBtn.id = 'nitro-btn-kart';
             nitroBtn.innerHTML = "NITRO";
-            
-            // Estilização CSS-in-JS
+            // Estilo Comercial "Juicy"
             Object.assign(nitroBtn.style, {
-                position: 'absolute', top: '35%', right: '20px', 
-                width: '85px', height: '85px',
-                borderRadius: '50%', 
-                background: 'radial-gradient(#ffaa00, #cc5500)', 
-                border: '4px solid #fff',
-                color: '#fff', display: 'flex', 
-                alignItems: 'center', justifyContent: 'center',
-                fontFamily: "sans-serif", fontWeight: "bold", fontSize: '16px', 
-                zIndex: '100',
-                boxShadow: '0 0 20px rgba(255, 100, 0, 0.5)', 
-                cursor: 'pointer', transition: 'transform 0.1s, filter 0.1s',
+                position: 'absolute', top: '30%', right: '20px', width: '90px', height: '90px',
+                borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%, #ffcc00, #ff4500)', 
+                border: '4px solid white', color: '#fff', 
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: "'Russo One', sans-serif", fontSize: '18px', zIndex: '100',
+                boxShadow: '0 5px 15px rgba(0,0,0,0.4), inset 0 0 10px rgba(255,255,0,0.5)', 
+                cursor: 'pointer', transform: 'scale(1)', transition: 'all 0.1s ease',
                 userSelect: 'none', touchAction: 'manipulation'
             });
 
-            // Eventos de ativação do Nitro
-            const toggleTurbo = (e) => {
+            const activateNitro = (e) => {
                 if(e) { e.preventDefault(); e.stopPropagation(); }
-                this.activateNitro();
-            };
-            nitroBtn.addEventListener('touchstart', toggleTurbo, {passive:false});
-            nitroBtn.addEventListener('mousedown', toggleTurbo);
-            
-            // Anexar ao container do jogo
-            const gameUI = document.getElementById('game-ui') || document.body;
-            gameUI.appendChild(nitroBtn);
-        },
-
-        // Função separada para ativar nitro (chamada por UI ou Teclado)
-        activateNitro: function() {
-            if(this.nitro > 5) {
-                this.turboLock = !this.turboLock;
-                // Feedback visual no botão
-                if(nitroBtn) {
-                    nitroBtn.style.transform = this.turboLock ? 'scale(0.95)' : 'scale(1)';
-                    nitroBtn.style.filter = this.turboLock ? 'brightness(1.5)' : 'brightness(1)';
+                if(this.nitro > 5) {
+                    this.turboLock = !this.turboLock;
+                    // Feedback visual tátil
+                    nitroBtn.style.transform = this.turboLock ? 'scale(0.9) translateY(5px)' : 'scale(1)';
+                    nitroBtn.style.boxShadow = this.turboLock ? '0 0 25px #00ffff' : '0 5px 15px rgba(0,0,0,0.4)';
+                    if(this.turboLock) {
+                        window.Sfx.play(600, 'square', 0.2, 0.1);
+                        this.shake = 10;
+                    }
                 }
-                if(this.turboLock) window.Sfx.play(600, 'square', 0.1, 0.1);
-            }
+            };
+
+            nitroBtn.addEventListener('touchstart', activateNitro, {passive:false});
+            nitroBtn.addEventListener('mousedown', activateNitro);
+            
+            // Container seguro
+            const container = document.getElementById('game-ui') || document.body;
+            container.appendChild(nitroBtn);
         },
 
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------
         // INICIALIZAÇÃO
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------
         init: function() { 
             this.buildTrack();
             this.setupUI();
             
             // Reset de Estado
             this.speed = 0; this.pos = 0; this.playerX = 0; this.steer = 0;
-            this.state = 'race'; this.lap = 1; this.score = 0;
-            this.driftState = 0; this.nitro = 100;
+            this.state = 'race'; this.lap = 1; this.score = 0; this.time = 0;
+            this.nitro = 100; this.driftState = 0; this.driftCharge = 0;
             
-            // Configuração dos Rivais (IA com personalidade)
+            // Rivais com IA Aprimorada (Rubber-banding Parameters)
+            // Aggro: Quão rápido tentam alcançar. Mistake: Chance de sair da linha ideal.
             this.rivals = [
-                { pos: 1000, x: -0.4, speed: 0, color: '#2ecc71', name: 'Luigi',  aggro: 0.03,  mistakeProb: 0.01 },
-                { pos: 800,  x: 0.4,  speed: 0, color: '#3498db', name: 'Toad',   aggro: 0.025, mistakeProb: 0.005 },
-                { pos: 1200, x: 0,    speed: 0, color: '#e74c3c', name: 'Bowser', aggro: 0.04,  mistakeProb: 0.02 }
+                { pos: 1000, x: -0.4, speed: 0, color: '#2ecc71', name: 'Luigi', aggro: 0.035, mistakeProb: 0.008, offset: 0 },
+                { pos: 800,  x: 0.4,  speed: 0, color: '#3498db', name: 'Toad',  aggro: 0.028, mistakeProb: 0.005, offset: 0 },
+                { pos: 1200, x: 0,    speed: 0, color: '#e74c3c', name: 'Mario', aggro: 0.040, mistakeProb: 0.012, offset: 0 },
+                { pos: 600,  x: -0.2, speed: 0, color: '#f1c40f', name: 'Wario', aggro: 0.045, mistakeProb: 0.020, offset: 0 }
             ];
 
-            if(window.System && window.System.msg) window.System.msg("LARGADA!"); 
+            window.System.msg("LARGADA!"); 
         },
 
-        // ---------------------------------------------------------------------
-        // GAME LOOP PRINCIPAL
-        // ---------------------------------------------------------------------
+        // =============================================================
+        // GAME LOOP (UPDATE & PHYSICS)
+        // =============================================================
         update: function(ctx, w, h, pose) {
             
-            // 1. ATUALIZAÇÃO DE FÍSICA E LÓGICA (Simulation Step)
+            // 1. Atualiza Física do Mundo e Jogador
             this.updatePhysics(w, h, pose);
             
-            // 2. RENDERIZAÇÃO DO MUNDO (Render Step - Legacy)
+            // 2. Renderiza Cenário (Pseudo-3D)
             this.renderWorld(ctx, w, h);
             
-            // 3. RENDERIZAÇÃO DA UI (HUD)
+            // 3. Renderiza UI (HUD, Mapa, Partículas UI)
             this.renderUI(ctx, w, h);
 
             return Math.floor(this.score);
         },
 
-        // ---------------------------------------------------------------------
-        // MOTOR DE FÍSICA (NÚCLEO DO MÓDULO)
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------
+        // MOTOR DE FÍSICA BLINDADO
+        // -------------------------------------------------------------
         updatePhysics: function(w, h, pose) {
-            const d = this; // alias para 'Logic'
-            
-            // === A. SISTEMA DE INPUT HÍBRIDO (POSE + MOUSE + KEYBOARD) ===
-            let detected = 0;
-            let pLeft = null, pRight = null;
+            const d = this; // Alias curto
 
-            // 1. Tentativa de Input por Pose (Gestos)
-            if (d.state === 'race' && pose && pose.keypoints) {
+            // --- A. INPUT SYSTEM (HÍBRIDO) ---
+            let inputDetected = false;
+            let poseSteer = 0;
+
+            // 1. Detecção de Pose (Prioridade)
+            if (pose && pose.keypoints) {
                 const lw = pose.keypoints.find(k => k.name === 'left_wrist');
                 const rw = pose.keypoints.find(k => k.name === 'right_wrist');
                 
-                // Mapeia coordenadas normalizadas para tela
-                if (lw && lw.score > 0.3) { pLeft = window.Gfx.map(lw, w, h); detected++; }
-                if (rw && rw.score > 0.3) { pRight = window.Gfx.map(rw, w, h); detected++; }
-
-                // Detecção de Gesto "Mãos para o Alto" (Turbo)
-                let avgY = h;
-                if (detected === 2) avgY = (pLeft.y + pRight.y) / 2;
-                else if (detected === 1) avgY = (pLeft ? pLeft.y : pRight.y);
-
-                if (avgY < h * CONF.TURBO_ZONE_Y) {
-                    d.gestureTimer++;
-                    if (d.gestureTimer === 12) d.activateNitro();
-                } else {
-                    d.gestureTimer = 0;
-                }
-            }
-
-            // 2. Cálculo do Volante (Steering)
-            if (detected === 2) {
-                // MODO: GESTO (Prioridade Máxima)
-                d.inputState = 2;
-                const dx = pRight.x - pLeft.x;
-                const dy = pRight.y - pLeft.y;
-                const rawAngle = Math.atan2(dy, dx); // Inclinação das mãos = Volante
-                d.targetSteer = (Math.abs(rawAngle) > CONF.DEADZONE) ? rawAngle * 2.3 : 0;
-                
-                // Atualiza UI do Volante Virtual
-                d.virtualWheel.x = (pLeft.x + pRight.x) / 2;
-                d.virtualWheel.y = (pLeft.y + pRight.y) / 2;
-                d.virtualWheel.r = Math.hypot(dx, dy) / 2;
-                d.virtualWheel.opacity = 1;
-            } else {
-                // MODO: FALLBACK (Teclado ou Mouse)
-                d.inputState = 1;
-                d.virtualWheel.opacity *= 0.9; // Fade out volante
-                
-                if (inputStatus.left) d.targetSteer = -1;
-                else if (inputStatus.right) d.targetSteer = 1;
-                else if (inputStatus.usingMouse) {
-                    // Mouse horizontal controla direção (centro da tela = 0)
-                    const normalizedX = (inputStatus.mouseX / w) * 2 - 1; 
-                    d.targetSteer = normalizedX * 1.5; 
-                } else {
-                    d.targetSteer = 0;
-                }
-            }
-            
-            // Suavização da entrada (Smooth damping)
-            d.steer += (d.targetSteer - d.steer) * CONF.INPUT_SMOOTHING;
-            d.steer = Math.max(-1.2, Math.min(1.2, d.steer)); // Clamp
-            
-            // Opacidade da UI de Nitro baseada na presença de gestos
-            if(nitroBtn) nitroBtn.style.opacity = (detected > 0) ? 0.3 : 1.0;
-
-            // === B. FÍSICA DO VEÍCULO ===
-            let currentMax = CONF.MAX_SPEED;
-            
-            // Gestão de Turbo e Nitro
-            if (d.turboLock && d.nitro > 0) {
-                currentMax = CONF.TURBO_MAX_SPEED;
-                d.nitro -= 0.6; // Gasto de combustível
-                if(d.nitro <= 0) { d.nitro = 0; d.turboLock = false; }
-            } else {
-                d.turboLock = false;
-                d.nitro = Math.min(100, d.nitro + 0.15); // Recarga passiva
-            }
-            // Boost temporário (Mini-Turbo)
-            if(d.boostTimer > 0) { currentMax += 80; d.boostTimer--; }
-
-            // Aceleração e Atrito
-            // Assume aceleração automática se estiver correndo, ou requer tecla UP/Mouse Click
-            const hasGas = (d.inputState > 0 || d.turboLock || inputStatus.up || detected > 0); 
-            // Nota: Para mobile, assume auto-accel. Para desktop, pode ser auto também.
-            
-            if (d.state === 'race') {
-                d.speed += (currentMax - d.speed) * 0.075; // Aceleração suave
-            } else {
-                d.speed *= CONF.FRICTION; // Desaceleração
-            }
-            
-            if(inputStatus.down) d.speed *= 0.90; // Freio
-
-            // Punição Offroad (Sair da pista)
-            const isOffRoad = Math.abs(d.playerX) > 2.2;
-            if (isOffRoad) d.speed *= CONF.OFFROAD_DECEL;
-
-            // === C. DINÂMICA DE CURVAS E DRIFT ===
-            const segIdx = Math.floor(d.pos / SEGMENT_LENGTH) % segments.length;
-            const seg = segments[segIdx] || segments[0];
-            const speedRatio = d.speed / CONF.MAX_SPEED;
-
-            // Força Centrífuga: Puxa o carro para fora na curva
-            // Fator ajustado pela posição X para punir quem fica na borda externa
-            const centrifugal = -seg.curve * (speedRatio * speedRatio) * (CONF.CENTRIFUGAL_FORCE * 0.5); 
-            
-            // Grip Dinâmico: Quão bem o carro segura na curva
-            let dynamicGrip = CONF.GRIP_CARVING * 0.65; 
-            if(Math.abs(d.steer) < 0.05) dynamicGrip = 0;
-            if(d.driftState === 1) dynamicGrip = CONF.GRIP_DRIFT * 0.75; 
-
-            // Cálculo da força lateral final
-            const edgeFactor = 1 - Math.min(Math.abs(d.playerX) / 4.5, 0.8); 
-            const playerForce = d.steer * CONF.STEER_AUTHORITY * dynamicGrip * speedRatio * 0.9 * edgeFactor;
-
-            // Counter-Steer: Virar contra a curva reduz a força centrífuga
-            const counterSteerFactor = 1 - Math.min(Math.abs(d.steer), 0.9);
-            const correctedCentrifugal = centrifugal * counterSteerFactor;
-
-            d.playerX += playerForce + correctedCentrifugal * edgeFactor;
-
-            // Limites rígidos da pista
-            if(d.playerX < -4.5) { d.playerX = -4.5; d.speed *= 0.95; }
-            if(d.playerX > 4.5)  { d.playerX = 4.5;  d.speed *= 0.95; }
-
-            // === MÁQUINA DE ESTADO DE DRIFT ===
-            if (d.driftState === 0) {
-                // Tentar iniciar Drift (Curva forte + Alta velocidade + Pista)
-                if (Math.abs(d.steer) > 0.9 && speedRatio > 0.6 && !isOffRoad) {
-                    d.driftState = 1; 
-                    d.driftDir = Math.sign(d.steer);
-                    d.driftCharge = 0; 
-                    d.bounce = -8; // Pulo visual ("Hop")
-                    window.Sfx.skid();
-                }
-            } else {
-                // Processando Drift
-                // Se soltar o volante, diminuir a velocidade ou sair da pista -> Fim do Drift
-                if (Math.abs(d.steer) < 0.2 || speedRatio < 0.3 || isOffRoad) {
-                    // Verifica se acumulou carga suficiente para Mini-Turbo
-                    if (d.mtStage > 0) {
-                        d.boostTimer = d.mtStage * 35; // Duração do boost
-                        if(window.System.msg) window.System.msg("BOOST!");
-                        window.Sfx.play(800, 'square', 0.2, 0.2);
-                        d.stats.drifts++;
+                if (lw && rw && lw.score > 0.4 && rw.score > 0.4) {
+                    inputDetected = true;
+                    d.inputState = 2; // Modo Pose
+                    const pLeft = window.Gfx.map(lw, w, h);
+                    const pRight = window.Gfx.map(rw, w, h);
+                    
+                    // Cálculo do ângulo
+                    const dx = pRight.x - pLeft.x;
+                    const dy = pRight.y - pLeft.y;
+                    const rawAngle = Math.atan2(dy, dx);
+                    
+                    // Deadzone e Amplificação
+                    if (Math.abs(rawAngle) > 0.05) {
+                        poseSteer = rawAngle * 2.5;
                     }
-                    d.driftState = 0; 
+                    
+                    // Visual Wheel
+                    d.virtualWheel.x = (pLeft.x + pRight.x) / 2;
+                    d.virtualWheel.y = (pLeft.y + pRight.y) / 2;
+                    d.virtualWheel.r = Math.hypot(dx, dy) / 2;
+                    d.virtualWheel.opacity = 1;
+
+                    // Gesto de Nitro (Mãos altas)
+                    if (d.virtualWheel.y < h * 0.35) {
+                        d.gestureTimer++;
+                        if (d.gestureTimer > 15 && d.nitro > 10 && !d.turboLock) {
+                            d.turboLock = true;
+                            window.System.msg("TURBO GESTO!");
+                            window.Sfx.play(600, 'square', 0.2, 0.2);
+                        }
+                    } else {
+                        d.gestureTimer = 0;
+                    }
+                }
+            }
+
+            // 2. Fallback Teclado (Se não houver pose)
+            if (!inputDetected) {
+                d.inputState = 1; // Modo Teclado
+                d.virtualWheel.opacity *= 0.9; // Fade out wheel
+                if (keys['ArrowLeft'] || keys['KeyA']) poseSteer = -1;
+                else if (keys['ArrowRight'] || keys['KeyD']) poseSteer = 1;
+                else poseSteer = 0;
+
+                // Nitro via Espaço
+                if (keys['Space'] && d.nitro > 5) d.turboLock = true;
+                else if (!nitroBtn.matches(':active')) d.turboLock = false; // Só solta se botão ui tbm não estiver pressionado
+            }
+
+            // Suavização do Input (Lerp)
+            d.targetSteer = poseSteer;
+            d.steer += (d.targetSteer - d.steer) * CONF.STEER_AUTHORITY;
+
+            // --- B. MOTOR E VELOCIDADE ---
+            let targetSpeed = 0;
+            let speedCap = d.turboLock ? CONF.TURBO_MAX_SPEED : CONF.MAX_SPEED;
+            let accel = CONF.ACCEL;
+
+            // Boost Temporário (Mini-Turbo ou Pad)
+            if (d.boostTimer > 0) {
+                speedCap += 100;
+                accel *= 2;
+                d.boostTimer--;
+                // Rastro de fogo
+                if(d.time % 2 === 0) spawnParticle(w/2, h*0.8, 'fire', '#00ffff');
+            }
+
+            // Consumo de Nitro
+            if (d.turboLock && d.nitro > 0) {
+                d.nitro -= 0.8;
+                spawnParticle(w/2 + (Math.random()*20-10), h*0.85, 'fire', '#ffaa00');
+                if (d.nitro <= 0) d.turboLock = false;
+            } else {
+                d.nitro = Math.min(100, d.nitro + 0.1); // Recarga lenta
+            }
+
+            // Aceleração Automática (Auto-Gas em jogos Mobile/Arcade) ou Tecla Cima
+            const isGasPressed = keys['ArrowUp'] || keys['KeyW'] || d.inputState === 2 || d.turboLock; 
+            
+            if (isGasPressed && d.state === 'race') {
+                d.speed += (speedCap - d.speed) * (accel / 100);
+            } else {
+                d.speed *= CONF.FRICTION; // Atrito natural
+                if (keys['ArrowDown'] || keys['KeyS']) d.speed *= CONF.BRAKING; // Freio
+            }
+
+            // Penalidade Offroad
+            const isOffRoad = Math.abs(d.playerX) > 2.3;
+            if (isOffRoad) {
+                d.speed *= CONF.OFFROAD_DECEL;
+                d.shake = 3; // Tremedeira
+                if(d.speed > 50 && d.time % 3 === 0) 
+                    spawnParticle(w/2 + (Math.random()*50-25), h*0.9, 'smoke', '#5c4033'); // Terra
+            }
+
+            // --- C. CURVAS E DRIFT (Física Avançada) ---
+            const segIdx = Math.floor(d.pos / SEGMENT_LENGTH) % segments.length;
+            const currentSeg = segments[segIdx];
+            const speedRatio = (d.speed / CONF.MAX_SPEED);
+
+            // 1. Drift Logic
+            // Entrar no drift: Curva forte + Pulo
+            if (d.driftState === 0 && Math.abs(d.steer) > 0.8 && speedRatio > 0.5 && keys['ShiftLeft']) {
+                 // Nota: Shift é opcional, mas no mobile é automático por curva forte
+                 d.driftState = 1;
+                 d.driftDir = Math.sign(d.steer);
+                 d.bounce = -12; // Hop!
+                 window.Sfx.skid();
+            }
+            // Mobile Auto-Drift logic: Se segurar curva forte por muito tempo
+            if (d.driftState === 0 && Math.abs(d.steer) > 0.95 && speedRatio > 0.6) {
+                d.driftState = 1;
+                d.driftDir = Math.sign(d.steer);
+                d.bounce = -10;
+            }
+
+            // Processar Drift
+            if (d.driftState === 1) {
+                // Sair do Drift
+                if (Math.abs(d.steer) < 0.1 || d.speed < 50) {
+                    // Libera Mini-Turbo
+                    if (d.mtStage > 0) {
+                        d.boostTimer = d.mtStage * 40; // 40 ou 80 frames
+                        window.System.msg(d.mtStage === 2 ? "SUPER TURBO!" : "TURBO!");
+                        window.Sfx.play(800, 'square', 0.2, 0.2);
+                        d.shake = 10;
+                    }
+                    d.driftState = 0;
+                    d.driftCharge = 0;
                     d.mtStage = 0;
                 } else {
-                    // Carregando Mini-Turbo
+                    // Carregar Mini-Turbo
                     d.driftCharge++;
-                    if(d.driftCharge > 80) d.mtStage = 2;       // Faísca Laranja
-                    else if(d.driftCharge > 35) d.mtStage = 1;  // Faísca Azul
+                    if (d.driftCharge > CONF.MINI_TURBO_2) d.mtStage = 2;
+                    else if (d.driftCharge > CONF.MINI_TURBO_1) d.mtStage = 1;
+                    
+                    // Partículas de Drift
+                    const pColor = d.mtStage === 2 ? '#ffaa00' : (d.mtStage === 1 ? '#00ffff' : '#cccccc');
+                    if (d.time % 4 === 0) {
+                        spawnParticle(w/2 - 30 * d.driftDir, h*0.85, 'spark', pColor);
+                        spawnParticle(w/2 + 30 * d.driftDir, h*0.85, 'spark', pColor);
+                    }
                 }
             }
 
-            // === D. SISTEMA DE COLISÃO ===
-            const hitbox = CONF.HITBOX_WIDTH; 
-            // Verifica obstáculos no segmento atual
-            seg.obs.forEach(o => {
-                if(o.x > 50) return; // Ignora obstáculos já removidos
-                // Colisão AABB simples em 1 eixo (X) pois Z é o segmento
-                if(Math.abs(d.playerX - o.x) < hitbox && Math.abs(d.playerX) < 4.5) {
-                    d.speed *= CONF.CRASH_PENALTY;
-                    d.stats.crashes++;
-                    o.x = 999; // Remove obstáculo (joga para fora)
-                    d.bounce = -15; // Pulo de impacto
-                    window.Sfx.crash();
-                    window.Gfx.shake(15);
+            // 2. Cálculo de Posição X (Inércia + Direção)
+            const dx = d.steer * d.speed * 0.0003; // Força do volante
+            
+            // Centrífuga: Puxa o carro para fora da curva baseado na velocidade
+            // Se estiver em drift, puxa menos (controle maior)
+            const centrifugal = currentSeg.curve * (speedRatio * speedRatio) * CONF.CENTRIFUGAL_FORCE;
+            
+            // Drift compensa a curva permitindo ângulo mais fechado
+            const driftBonus = (d.driftState === 1 && Math.sign(d.steer) === Math.sign(currentSeg.curve)) 
+                             ? CONF.DRIFT_BONUS_TURN : 1.0;
+
+            d.playerX -= (dx * driftBonus) - centrifugal;
+
+            // Limites da pista (Clamp)
+            if (d.playerX < -3.5) d.playerX = -3.5;
+            if (d.playerX > 3.5) d.playerX = 3.5;
+
+            // --- D. COLISÕES & OBSTÁCULOS ---
+            // Lookahead simples (segmento atual)
+            currentSeg.obs.forEach(o => {
+                const spriteW = CONF.HITBOX_WIDTH;
+                // Se colidir
+                if (Math.abs(d.playerX - o.x) < spriteW) {
+                    if (o.type === 'cone' || o.type === 'sign') {
+                        // Batida
+                        d.speed *= CONF.CRASH_PENALTY;
+                        d.shake = 20;
+                        d.bounce = -10;
+                        window.Sfx.crash();
+                        window.System.msg("CRASH!");
+                        // Efeito visual: arremessa o cone (virtualmente) removendo-o
+                        o.x = 100; // Move para fora da tela
+                        // Partículas de batida
+                        for(let i=0; i<5; i++) spawnParticle(w/2, h*0.8, 'smoke', '#aaaaaa');
+                    }
                 }
             });
 
-            // === E. NAVEGAÇÃO, RIVAIS E PROGRESSÃO ===
+            // --- E. PROGRESSO & IA ---
             d.pos += d.speed;
             
-            // Checagem de Volta
+            // Volta Completa
             while (d.pos >= trackLength) {
                 d.pos -= trackLength;
                 d.lap++;
-
                 if (d.lap <= d.totalLaps) {
-                    if(window.System.msg) window.System.msg(`VOLTA ${d.lap}/${d.totalLaps}`);
+                    d.lapPopupText = `VOLTA ${d.lap}/${d.totalLaps}`;
+                    d.lapPopupTimer = 120;
+                    window.Sfx.play(400, 'sine', 0.1, 0.1);
                 }
-
-                if(d.lap > d.totalLaps && d.state === 'race') {
+                if (d.lap > d.totalLaps && d.state === 'race') {
                     d.state = 'finished';
-                    if(window.System.msg) window.System.msg(d.rank === 1 ? "VITÓRIA!" : "FIM!");
-                    if(d.rank===1) window.Sfx.play(1000,'square',0.5,1);
+                    window.System.msg(d.rank === 1 ? "CAMPEÃO!" : "TERMINADO!");
+                    setTimeout(() => window.System.gameOver(Math.floor(d.score)), 3000);
                 }
             }
-            while(d.pos < 0) d.pos += trackLength;
+            while (d.pos < 0) d.pos += trackLength;
 
-            // IA dos Rivais (Rubber Banding)
-            let pAhead = 0;
+            // IA dos Rivais (Rubber-Banding)
+            let playersAhead = 0;
+            const playerTotalDist = d.pos + (d.lap * trackLength);
+
             d.rivals.forEach(r => {
-                let dist = r.pos - d.pos;
-                // Tratamento de loop circular da pista
-                if(dist > trackLength/2) dist -= trackLength;
-                if(dist < -trackLength/2) dist += trackLength;
-
-                let targetS = CONF.MAX_SPEED * 0.45;
+                // Distância relativa para o jogador
+                const rivalTotalDist = r.pos + ((d.lap - (r.pos > d.pos + trackLength/2 ? 1 : 0)) * trackLength); // Simplificado
                 
-                // Lógica Elástica (Rubber Banding)
-                // Se rival está muito longe, desacelera. Se muito perto/atrás, acelera levemente.
-                if(dist > 1200) targetS *= 0.82; 
-                if(dist < -1200) targetS *= 0.95;
-                
-                // Aplica agressividade e velocidade
-                r.speed += (targetS - r.speed) * r.aggro;
-                r.pos += r.speed;
-                if(r.pos >= trackLength) r.pos -= trackLength;
+                let distDelta = rivalTotalDist - playerTotalDist;
+                // Correção de loop circular para cálculo de velocidade
+                if (distDelta > trackLength/2) distDelta -= trackLength;
+                if (distDelta < -trackLength/2) distDelta += trackLength;
 
+                // Velocidade base do rival
+                let targetRivalSpeed = CONF.MAX_SPEED * 0.95;
+
+                // Rubber Banding: Se o jogador está longe na frente, rival acelera. Se jogador está atrás, rival espera.
+                if (distDelta < -500) targetRivalSpeed *= 1.35; // Catch-up forte
+                else if (distDelta > 500) targetRivalSpeed *= 0.85; // Espera
+                
                 // IA de Curva
-                const rSeg = segments[Math.floor(r.pos/SEGMENT_LENGTH)%segments.length];
-                let idealLine = -(rSeg.curve * 0.6); // Tenta fazer a curva por dentro
-                if (Math.random() < r.mistakeProb) idealLine = -(rSeg.curve * -0.5); // Erro humano
-                r.x += (idealLine - r.x) * 0.05;
+                const rSeg = segments[Math.floor(r.pos/SEGMENT_LENGTH) % segments.length];
+                // Eles tentam seguir a linha oposta à curva (racing line)
+                let idealX = -rSeg.curve * 0.5; 
+                // Erro humano aleatório
+                if (Math.random() < r.mistakeProb) idealX = (Math.random() * 4) - 2;
 
-                // Calcula Ranking
-                let playerTotal = d.pos + (d.lap * trackLength);
-                let rivalTotal = r.pos + ((d.lap - 1) * trackLength);
-                if (rivalTotal > playerTotal) pAhead++;
+                r.x += (idealX - r.x) * 0.05;
+                r.speed += (targetRivalSpeed - r.speed) * r.aggro;
+                r.pos += r.speed;
+
+                // Wrap around da posição do rival
+                if (r.pos >= trackLength) r.pos -= trackLength;
+                if (r.pos < 0) r.pos += trackLength;
+
+                // Contagem de Rank (Baseada na distância absoluta estimada)
+                // Lógica simplificada de rank local
+                if (distDelta > 0) playersAhead++;
             });
-            d.rank = 1 + pAhead;
 
-            // Efeitos Finais
+            d.rank = 1 + playersAhead;
+
+            // Timers & Score
             d.time++;
             d.score += d.speed * 0.01;
+            
+            // Decaimento de efeitos visuais
             d.bounce *= 0.8;
-            if(isOffRoad) { d.bounce = Math.sin(d.time)*5; window.Gfx.shake(2); } // Trepidação offroad
-            
-            // Inclinação visual baseada no volante
-            d.visualTilt += (d.steer * 15 - d.visualTilt) * 0.1;
-            
-            // Fim de Jogo
-            if (d.state === 'finished') {
-                d.speed *= 0.95;
-                if(d.speed < 2 && d.finishTimer === 0) {
-                    d.finishTimer = 1;
-                    setTimeout(()=> {
-                        if(window.System.gameOver) window.System.gameOver(Math.floor(d.score));
-                    }, 2000);
-                }
-            }
+            d.shake *= 0.8;
+            d.visualTilt += (d.steer * 20 - d.visualTilt) * 0.1;
         },
 
-        // ---------------------------------------------------------------------
-        // RENDERIZAÇÃO DO MUNDO (LEGACY CODE PRESERVADO)
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------
+        // RENDER: CENÁRIO (PSEUDO-3D PRESERVED & OPTIMIZED)
+        // -------------------------------------------------------------
         renderWorld: function(ctx, w, h) {
             const d = this;
             const cx = w / 2;
-            const horizon = h * 0.40;
+            // Shake Effect no Horizonte
+            const horizon = (h * 0.40) + (Math.random() * d.shake - d.shake/2);
 
-            // 1. CÉU E PARALLAX
+            // 1. Céu (Parallax)
             const currentSegIndex = Math.floor(d.pos / SEGMENT_LENGTH) % segments.length;
-            const currentSeg = segments[currentSegIndex] || segments[0];
-            const isOffRoad = Math.abs(d.playerX) > 2.2;
-
-            let topSky = d.skyColor === 0 ? "#3388ff" : "#663399";
-            let botSky = d.skyColor === 0 ? "#88ccff" : "#ffaa00";
-            const gradSky = ctx.createLinearGradient(0, 0, 0, horizon);
-            gradSky.addColorStop(0, topSky); gradSky.addColorStop(1, botSky);
-            ctx.fillStyle = gradSky; ctx.fillRect(0, 0, w, horizon);
+            const currentSeg = segments[currentSegIndex];
+            
+            // Gradiente dinâmico (Dia/Tarde simulado pelo skyColor)
+            const grad = ctx.createLinearGradient(0, 0, 0, h);
+            grad.addColorStop(0, "#1e90ff"); grad.addColorStop(0.4, "#87cefa");
+            ctx.fillStyle = grad; ctx.fillRect(0,0,w,horizon);
 
             // Montanhas Parallax
-            const bgOffset = (currentSeg.curve * 30) + (d.steer * 20);
-            ctx.fillStyle = d.skyColor === 0 ? '#44aa44' : '#331133';
-            ctx.beginPath(); ctx.moveTo(0, horizon);
-            for(let i=0; i<=12; i++) {
-                const mx = (w/12 * i) - (bgOffset * 0.5);
-                const my = horizon - 50 - Math.abs(Math.sin(i + d.pos*0.0001))*40;
-                ctx.lineTo(mx, my);
+            ctx.fillStyle = "#2c3e50";
+            ctx.beginPath();
+            const bgOffset = (currentSeg.curve * 50) + (d.steer * 30);
+            ctx.moveTo(0, horizon);
+            for(let x=0; x<=w; x+=w/10) {
+                const hM = Math.sin(x*0.01 + d.pos*0.0001 - bgOffset*0.01) * 30;
+                ctx.lineTo(x, horizon - 50 + hM);
             }
             ctx.lineTo(w, horizon); ctx.fill();
 
             // Chão
-            ctx.fillStyle = isOffRoad ? '#336622' : '#448833';
+            ctx.fillStyle = Math.abs(d.playerX) > 2.3 ? "#5d4037" : "#4caf50";
             ctx.fillRect(0, horizon, w, h-horizon);
 
-            // 2. ESTRADA PSEUDO-3D (Algoritmo de Projeção)
-            let drawDistance = CONF.DRAW_DISTANCE;
+            // 2. Estrada (Projection Loop)
             let dx = 0;
-            let camX = d.playerX * (w * 0.4);
+            let camX = d.playerX * (w * 0.5); // Camera tracking
             let segmentCoords = [];
+            
+            // Otimização: Renderizar apenas o necessário
+            const drawDist = CONF.DRAW_DISTANCE;
 
-            for(let n = 0; n < drawDistance; n++) {
+            for(let n = 0; n < drawDist; n++) {
                 const segIdx = (currentSegIndex + n) % segments.length;
                 const seg = segments[segIdx];
-                dx += (seg.curve * 0.8);
                 
-                const z = n * 20; 
-                const scale = 1 / (1 + (z * 0.05));
-                const scaleNext = 1 / (1 + ((z+20) * 0.05));
-                const screenY = horizon + ((h - horizon) * scale);
-                const screenYNext = horizon + ((h - horizon) * scaleNext);
-                const screenX = cx - (camX * scale) - (dx * z * scale * 2);
-                const screenXNext = cx - (camX * scaleNext) - ((dx + seg.curve*0.8) * (z+20) * scaleNext * 2);
-                const roadWidth = (w * 3) * scale;
-                const roadWidthNext = (w * 3) * scaleNext;
+                // Acumula curvatura
+                dx += seg.curve; 
                 
-                segmentCoords.push({ x: screenX, y: screenY, scale: scale, index: segIdx, z: z });
+                const z = n * SEGMENT_LENGTH;
+                // Perspective projection factor
+                const scale = 1 / (1 + (z * 0.01)); 
+                const scaleNext = 1 / (1 + ((z + SEGMENT_LENGTH) * 0.01));
+                
+                // Screen coordinates
+                const bottomY = horizon + ((h - horizon) * scale);
+                const topY = horizon + ((h - horizon) * scaleNext);
+                
+                // X position with curve offset
+                const bottomX = cx - (camX * scale) - (dx * z * scale * 0.002);
+                const topX = cx - (camX * scaleNext) - ((dx + seg.curve) * (z + SEGMENT_LENGTH) * scaleNext * 0.002);
+                
+                const width = (w * 4) * scale;
+                const widthNext = (w * 4) * scaleNext;
 
-                // Desenha Trapézios da estrada
-                const grassColor = (seg.color === 'dark') ? (isOffRoad?'#336622':'#448833') : (isOffRoad?'#3a7528':'#55aa44');
-                const roadColor = (seg.color === 'dark') ? '#666' : '#636363';
-                const rumbleColor = (seg.color === 'dark') ? '#c00' : '#fff';
+                segmentCoords.push({ 
+                    x: bottomX, y: bottomY, scale: scale, index: segIdx, z: z, 
+                    topY: topY, topX: topX, width: width, widthNext: widthNext 
+                });
 
-                ctx.fillStyle = grassColor; ctx.fillRect(0, screenYNext, w, screenY - screenYNext);
+                // Desenha o segmento (Painter's Algo: back to front logic not needed here for road, but strictly ordered)
+                // Na verdade, desenhamos de trás para frente no loop de sprites, mas a estrada pode ser desenhada aqui se cortarmos o z-buffer
+                // Mas para seguir o padrão clássico "Outrun", desenhamos a estrada aqui e sprites depois de trás pra frente.
                 
-                // Rumble Strips (Zebras)
-                ctx.fillStyle = rumbleColor;
-                ctx.beginPath(); 
-                ctx.moveTo(screenX - roadWidth/2 - roadWidth*0.1, screenY); 
-                ctx.lineTo(screenX + roadWidth/2 + roadWidth*0.1, screenY); 
-                ctx.lineTo(screenXNext + roadWidthNext/2 + roadWidthNext*0.1, screenYNext); 
-                ctx.lineTo(screenXNext - roadWidthNext/2 - roadWidthNext*0.1, screenYNext); 
+                const colorGrass = (seg.color === 'dark') ? '#4caf50' : '#66bb6a';
+                const colorRumble = (seg.color === 'dark') ? '#c0392b' : '#ecf0f1';
+                const colorRoad = (seg.color === 'dark') ? '#555' : '#666';
+
+                // Grama Lateral
+                ctx.fillStyle = colorGrass;
+                ctx.fillRect(0, topY, w, bottomY - topY); // Preenche linha inteira (otimização)
+
+                // Rumble Strip
+                ctx.fillStyle = colorRumble;
+                ctx.beginPath();
+                ctx.moveTo(bottomX - width/2 - width*0.05, bottomY);
+                ctx.lineTo(bottomX + width/2 + width*0.05, bottomY);
+                ctx.lineTo(topX + widthNext/2 + widthNext*0.05, topY);
+                ctx.lineTo(topX - widthNext/2 - widthNext*0.05, topY);
                 ctx.fill();
-                
-                // Asfalto
-                ctx.fillStyle = roadColor;
-                ctx.beginPath(); 
-                ctx.moveTo(screenX - roadWidth/2, screenY); 
-                ctx.lineTo(screenX + roadWidth/2, screenY); 
-                ctx.lineTo(screenXNext + roadWidthNext/2, screenYNext); 
-                ctx.lineTo(screenXNext - roadWidthNext/2, screenYNext); 
+
+                // Pista
+                ctx.fillStyle = colorRoad;
+                ctx.beginPath();
+                ctx.moveTo(bottomX - width/2, bottomY);
+                ctx.lineTo(bottomX + width/2, bottomY);
+                ctx.lineTo(topX + widthNext/2, topY);
+                ctx.lineTo(topX - widthNext/2, topY);
                 ctx.fill();
             }
 
-            // 3. SPRITES (Painter's Algorithm: Trás para Frente)
-            for(let n = drawDistance-1; n >= 0; n--) {
+            // 3. Renderizar Sprites (In Reverse Order for Z-Sorting)
+            for (let n = drawDist - 1; n >= 0; n--) {
                 const coord = segmentCoords[n];
                 const seg = segments[coord.index];
-                
-                // Renderização de Rivais
+
+                // Rivais
                 d.rivals.forEach(r => {
+                    // Check se rival está neste segmento
                     let rRelPos = r.pos - d.pos;
-                    if(rRelPos < -trackLength/2) rRelPos += trackLength;
-                    if(rRelPos > trackLength/2) rRelPos -= trackLength;
+                    if (rRelPos < -trackLength/2) rRelPos += trackLength;
+                    if (rRelPos > trackLength/2) rRelPos -= trackLength;
                     
-                    let distInSegs = Math.floor(rRelPos / SEGMENT_LENGTH);
-                    if (Math.abs(distInSegs - n) < 1.5 && n > 1) {
+                    const segDist = Math.floor(rRelPos / SEGMENT_LENGTH);
+                    
+                    if (segDist === n) {
                         const rScale = coord.scale;
-                        const rX = coord.x + (r.x * (w * 3) * rScale / 2);
-                        const rY = coord.y;
+                        // Interpolate lateral X relative to road center
+                        const rScreenX = coord.x + (r.x * coord.width / 2);
+                        const rScreenY = coord.y;
                         
-                        ctx.save(); ctx.translate(rX, rY); ctx.scale(rScale * 12, rScale * 12);
-                        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(0, 0, 8, 3, 0, 0, Math.PI*2); ctx.fill();
-                        ctx.fillStyle = r.color; ctx.fillRect(-6, -8, 12, 6);
-                        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, -12, 4, 0, Math.PI*2); ctx.fill();
+                        // Desenha Rival (Simple Kart Sprite)
+                        const size = w * 0.006 * (1/rScale); // Scale correction inverted? No, scale is 0..1
+                        const kartSize = 1000 * rScale; // Empirical
+
+                        ctx.save();
+                        ctx.translate(rScreenX, rScreenY);
+                        ctx.scale(rScale * 8, rScale * 8); // Scale multiplier
+                        
+                        // Sombra
+                        ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.beginPath(); ctx.ellipse(0, 5, 20, 5, 0, 0, Math.PI*2); ctx.fill();
+                        // Corpo
+                        ctx.fillStyle = r.color; ctx.fillRect(-10, -15, 20, 15);
+                        // Cabeça
+                        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, -18, 8, 0, Math.PI*2); ctx.fill();
+                        // Nome
+                        if(n < 20) { // Só mostra nome se perto
+                            ctx.fillStyle = "#fff"; ctx.font = "10px Arial"; ctx.fillText(r.name, -10, -30);
+                        }
                         ctx.restore();
                     }
                 });
 
-                // Renderização de Obstáculos
-                if(seg.obs.length > 0) {
-                    seg.obs.forEach(o => {
-                        if (o.x > 500) return; // Ignora removidos
+                // Obstáculos
+                seg.obs.forEach(o => {
+                    if (o.x > 50) return; // Se foi "jogado longe"
+                    const scale = coord.scale;
+                    const spriteX = coord.x + (o.x * coord.width / 2);
+                    const spriteY = coord.y;
+                    
+                    ctx.save();
+                    ctx.translate(spriteX, spriteY);
+                    ctx.scale(scale * 10, scale * 10);
+                    
+                    if(o.type === 'cone') {
+                        ctx.fillStyle = '#ff5722';
+                        ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(5, 0); ctx.lineTo(0, -15); ctx.fill();
+                    } else if (o.type === 'sign') {
+                        ctx.fillStyle = '#f1c40f'; ctx.fillRect(-8, -20, 16, 20);
+                        ctx.fillStyle = '#000'; ctx.fillText(seg.curve > 0 ? ">" : "<", -3, -5);
+                    }
+                    ctx.restore();
+                });
+            }
 
-                        const sScale = coord.scale;
-                        const sX = coord.x + (o.x * (w * 3) * sScale / 2);
-                        const sY = coord.y;
-                        const size = (w * 0.22) * sScale;
-
-                        if (o.type === 'cone') {
-                            ctx.fillStyle = '#ff5500'; ctx.beginPath(); ctx.moveTo(sX, sY - size); ctx.lineTo(sX - size*0.3, sY); ctx.lineTo(sX + size*0.3, sY); ctx.fill();
-                        } else {
-                            ctx.fillStyle = '#f1c40f'; ctx.fillRect(sX - size/2, sY - size, size, size*0.6);
-                            ctx.fillStyle = '#000'; ctx.textAlign='center'; ctx.font = `bold ${size*0.4}px Arial`;
-                            ctx.fillText(seg.curve > 0 ? ">>>" : "<<<", sX, sY - size*0.2);
-                        }
-                    });
+            // 4. Renderizar Jogador (Local)
+            // Desenhado por último para ficar na frente
+            const playerScale = w * 0.006; // Ajuste de escala responsivo
+            // Bounce do motor + colisão
+            const pY = h * 0.85 + d.bounce + (Math.random() * (d.speed/CONF.MAX_SPEED) * 2); 
+            
+            this.drawPlayer(ctx, cx, pY, playerScale, d);
+            
+            // 5. Renderizar Partículas (Overlay Global)
+            particles.forEach((p, i) => {
+                p.x += p.vx; 
+                p.y += p.vy; 
+                p.life -= p.decay;
+                
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                } else {
+                    ctx.globalAlpha = p.life;
+                    ctx.fillStyle = p.color;
+                    const size = (p.type === 'smoke' ? 10 : 5) * (p.y / h); // Perspective fake
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, size, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
                 }
-            }
-
-            // 4. JOGADOR (Sprite de alta fidelidade original)
-            const carScale = w * 0.0055;
-            this.drawKartSprite(ctx, cx, h*0.85 + d.bounce, carScale, d.steer, d.visualTilt, d);
-
-            // Geração de Partículas (Drift e Boost)
-            if (d.driftState === 1 && d.time % 4 === 0) {
-                 const pX = cx + (d.playerX * w * 0.4) + (d.driftDir * 50);
-                 const color = d.mtStage === 2 ? '#ff5500' : (d.mtStage === 1 ? '#00ffff' : '#ffffaa');
-                 particles.push({ x: pX, y: h * 0.9, vx: -d.driftDir * (2+Math.random()*4), vy: -2-Math.random()*3, c: color, l: 20 });
-            }
-
-            // Renderização de Partículas
-            particles.forEach((p, i) => { 
-                p.x += p.vx; p.y += p.vy; p.l--; 
-                if(p.l<=0) {
-                    particles.splice(i,1); 
-                } else { 
-                    ctx.fillStyle=p.c; ctx.globalAlpha = p.l / 50; 
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill(); 
-                    ctx.globalAlpha = 1.0; 
-                } 
             });
         },
 
-        // Helper: Desenha o Sprite do Kart do Jogador
-        drawKartSprite: function(ctx, cx, y, carScale, steer, tilt, d) {
-            ctx.save(); ctx.translate(cx, y); ctx.scale(carScale, carScale);
+        // Helper: Desenha o Kart do Jogador (High Quality)
+        drawPlayer: function(ctx, x, y, s, d) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(s, s);
             
-            let visualRotation = tilt * 0.02; 
-            if (d.driftState === 1) visualRotation += (d.driftDir * 0.3);
+            // Inclinação nas curvas
+            let angle = d.visualTilt * 0.03;
+            if(d.driftState === 1) angle += d.driftDir * 0.2; // Drift Angle
+            ctx.rotate(angle);
+
+            // Sombra Dinâmica
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.beginPath(); ctx.ellipse(0, 30, 50 - Math.abs(d.bounce), 10, 0, 0, Math.PI*2); ctx.fill();
+
+            // Kart Body (Gradiente Metálico)
+            const g = ctx.createLinearGradient(-30, 0, 30, 0);
+            g.addColorStop(0, '#b71c1c'); g.addColorStop(0.5, '#f44336'); g.addColorStop(1, '#b71c1c');
+            ctx.fillStyle = g;
             
-            ctx.rotate(visualRotation);
+            // Chassi Esportivo
+            ctx.beginPath();
+            ctx.moveTo(-25, -20); ctx.lineTo(25, -20); // Traseira
+            ctx.lineTo(35, 10); ctx.lineTo(15, 40); // Bico Dir
+            ctx.lineTo(-15, 40); ctx.lineTo(-35, 10); // Bico Esq
+            ctx.fill();
 
-            // Sombra
-            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(0, 35, 60, 15, 0, 0, Math.PI*2); ctx.fill();
-
-            // Chassi
-            const gradBody = ctx.createLinearGradient(-30, 0, 30, 0);
-            gradBody.addColorStop(0, '#cc0000'); gradBody.addColorStop(0.5, '#ff4444'); gradBody.addColorStop(1, '#cc0000');
-            ctx.fillStyle = gradBody;
-            ctx.beginPath(); ctx.moveTo(-25, -30); ctx.lineTo(25, -30); ctx.lineTo(40, 10); ctx.lineTo(10, 35); ctx.lineTo(-10, 35); ctx.lineTo(-40, 10); ctx.fill();
-
-            // Chama do Turbo
+            // Escapamento / Turbo
             if (d.turboLock || d.boostTimer > 0) {
-                const fireSize = 10 + Math.random() * 15;
-                ctx.fillStyle = (d.mtStage === 2 || d.turboLock) ? '#00ffff' : '#ffaa00';
-                ctx.beginPath(); ctx.arc(-20, -30, fireSize, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.arc(20, -30, fireSize, 0, Math.PI*2); ctx.fill();
+                const color = (d.mtStage === 2) ? '#ff9800' : '#00bcd4';
+                const size = (Math.random() * 10) + 10;
+                ctx.fillStyle = color;
+                ctx.beginPath(); ctx.arc(-20, -20, size, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(20, -20, size, 0, Math.PI*2); ctx.fill();
             }
 
-            // Rodas
-            const wheelAngle = steer * 0.8;
-            ctx.fillStyle = '#111';
-            const drawWheel = (wx, wy) => {
-                ctx.save(); ctx.translate(wx, wy); ctx.rotate(wheelAngle); ctx.fillRect(-12, -15, 24, 30); ctx.fillStyle = '#666'; ctx.fillRect(-5, -5, 10, 10); ctx.fillStyle = '#111'; ctx.restore();
-            };
-            drawWheel(-45, 15); drawWheel(45, 15); ctx.fillRect(-50, -25, 20, 30); ctx.fillRect(30, -25, 20, 30);
+            // Rodas (Giram visualmente com a velocidade)
+            ctx.fillStyle = "#212121";
+            const wheelY = 15;
+            // Efeito de rotação simples (cor muda)
+            if((d.time % 4) < 2) ctx.fillStyle = "#424242"; 
+            ctx.fillRect(-45, wheelY, 15, 25);
+            ctx.fillRect(30, wheelY, 15, 25);
+            // Rodas Traseiras
+            ctx.fillRect(-48, -25, 18, 25);
+            ctx.fillRect(30, -25, 18, 25);
 
-            // Piloto
-            ctx.save(); ctx.translate(0, -10); ctx.rotate(steer * 0.3);
-            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, -20, 18, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#333'; ctx.fillRect(-15, -25, 30, 8);
-            ctx.fillStyle = 'red'; ctx.font='bold 12px Arial'; ctx.textAlign='center'; ctx.fillText('M', 0, -32);
-            ctx.restore(); ctx.restore(); 
+            // Piloto (Capacete e Corpo)
+            ctx.fillStyle = "#333"; // Macacão
+            ctx.fillRect(-15, -25, 30, 15);
+            
+            ctx.fillStyle = "#eceff1"; // Capacete
+            ctx.beginPath(); ctx.arc(0, -30, 16, 0, Math.PI*2); ctx.fill();
+            
+            // Visor do Capacete
+            ctx.fillStyle = "#37474f";
+            ctx.beginPath(); ctx.ellipse(0, -30, 12, 6, 0, 0, Math.PI*2); ctx.fill();
+
+            // Placa
+            ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign="center";
+            ctx.fillText("OTTO", 0, 20);
+
+            ctx.restore();
         },
 
-        // ---------------------------------------------------------------------
-        // RENDERIZAÇÃO DA UI (HUD)
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------
+        // RENDER: HUD & UI (COMERCIAL GRADE)
+        // -------------------------------------------------------------
         renderUI: function(ctx, w, h) {
             const d = this;
 
             if (d.state === 'race') {
-                // Voltas
-                ctx.fillStyle = 'rgba(0,0,0,0.6)';
-                ctx.fillRect(20, h - 50, 120, 30);
-                ctx.fillStyle = '#fff';
-                ctx.font = "bold 14px Arial";
-                ctx.fillText(`VOLTA ${d.lap}/${d.totalLaps}`, 30, h - 30);
-
-                // Velocímetro e Posição
-                const hudX = w - 80;
-                const hudY = h - 60;
-
-                ctx.fillStyle = 'rgba(0,0,0,0.6)';
-                ctx.beginPath();
-                ctx.arc(hudX, hudY, 55, 0, Math.PI * 2);
-                ctx.fill();
-
-                const rpm = Math.min(1, d.speed / CONF.TURBO_MAX_SPEED);
-                ctx.beginPath();
-                ctx.arc(hudX, hudY, 50, Math.PI, Math.PI + Math.PI * rpm);
-                ctx.lineWidth = 6;
-                ctx.strokeStyle = (d.turboLock || d.boostTimer > 0) ? '#00ffff' : '#ff3300';
-                ctx.stroke();
-
-                ctx.fillStyle = '#fff';
-                ctx.textAlign = 'center';
-                ctx.font = "bold 36px 'Russo One', sans-serif";
-                ctx.fillText(Math.floor(d.speed), hudX, hudY + 10);
-                
-                const totalRacers = d.rivals.length + 1;
-                ctx.font = "bold 14px Arial";
-                ctx.fillText(`POSIÇÃO`, hudX, hudY + 22);
-                ctx.font = "bold 18px 'Russo One', sans-serif";
-                ctx.fillText(`${d.rank} / ${totalRacers}`, hudX, hudY + 42);
-
-                // Barra de Nitro
-                const nW = 220;
-                ctx.fillStyle = '#111';
-                ctx.fillRect(w / 2 - nW / 2, 20, nW, 20);
-                ctx.fillStyle = d.turboLock ? '#00ffff' : (d.nitro > 20 ? '#00aa00' : '#ff3300');
-                ctx.fillRect(w / 2 - nW / 2 + 2, 22, (nW - 4) * (d.nitro / 100), 16);
-
-                if (!minimapPoints || minimapPoints.length < 2) return;
-
-                // Mini Mapa Dinâmico
-                const mapSize = 120;
-                const mapX = 20;
-                const mapY = 90;
-                
-                ctx.save();
-                ctx.globalAlpha = 0.6;
-                ctx.fillStyle = '#000';
-                ctx.fillRect(mapX - 6, mapY - 6, mapSize + 12, mapSize + 12);
-                ctx.globalAlpha = 1;
-
-                ctx.beginPath();
-                ctx.rect(mapX, mapY, mapSize, mapSize);
-                ctx.clip();
-
-                // Normalização do Mapa para caber no box
-                const bounds = minimapPoints.reduce((b, p) => ({
-                    minX: Math.min(b.minX, p.x), maxX: Math.max(b.maxX, p.x),
-                    minY: Math.min(b.minY, p.y), maxY: Math.max(b.maxY, p.y),
-                }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
-
-                const scale = Math.min(
-                    mapSize / (bounds.maxX - bounds.minX),
-                    mapSize / (bounds.maxY - bounds.minY)
-                ) * 0.85;
-
-                // Centraliza e rotaciona conforme a pista
-                ctx.translate(mapX + mapSize / 2, mapY + mapSize / 2);
-                ctx.scale(scale, scale);
-                
-                const segIdxMap = Math.floor(d.pos / SEGMENT_LENGTH) % segments.length;
-                const segMap = segments[segIdxMap];
-                ctx.rotate(-segMap.curve * 0.8); // Rotação dinâmica
-                
-                ctx.translate(-(bounds.minX + bounds.maxX) / 2, -(bounds.minY + bounds.maxY) / 2);
-
-                // Desenha Traçado
-                ctx.strokeStyle = '#aaa';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                minimapPoints.forEach((p, i) => {
-                    if (i === 0) ctx.moveTo(p.x, p.y);
-                    else ctx.lineTo(p.x, p.y);
-                });
-                ctx.stroke();
-
-                // Desenha Jogador
-                const pi = Math.floor((d.pos / trackLength) * minimapPoints.length) % minimapPoints.length;
-                ctx.fillStyle = '#00ffff';
-                ctx.beginPath();
-                ctx.arc(minimapPoints[pi].x, minimapPoints[pi].y, 5, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Desenha Rivais
-                d.rivals.forEach(r => {
-                    const ri = Math.floor((r.pos / trackLength) * minimapPoints.length) % minimapPoints.length;
-                    ctx.fillStyle = r.color;
-                    ctx.beginPath();
-                    ctx.arc(minimapPoints[ri].x, minimapPoints[ri].y, 4, 0, Math.PI * 2);
-                    ctx.fill();
-                });
-                ctx.restore();
-
-                // Volante Virtual (Feedback Visual de Gestos)
-                if (d.virtualWheel.opacity > 0.01) {
-                    const vw = d.virtualWheel;
+                // --- 1. POPUP DE MENSAGEM ---
+                if (d.lapPopupTimer > 0) {
                     ctx.save();
-                    ctx.globalAlpha = vw.opacity;
-                    ctx.translate(vw.x, vw.y);
+                    ctx.shadowColor = "black"; ctx.shadowBlur = 10;
+                    ctx.globalAlpha = Math.min(1, d.lapPopupTimer / 20);
+                    // Escala pulsante
+                    const s = 1 + Math.sin(d.time * 0.2) * 0.1;
+                    ctx.translate(w/2, h*0.3); ctx.scale(s, s);
                     
-                    ctx.lineWidth = 8; ctx.strokeStyle = '#222';
-                    ctx.beginPath(); ctx.arc(0, 0, vw.r, 0, Math.PI * 2); ctx.stroke();
-                    
-                    ctx.lineWidth = 4; ctx.strokeStyle = '#00ffff';
-                    ctx.beginPath(); ctx.arc(0, 0, vw.r - 8, 0, Math.PI * 2); ctx.stroke();
-                    
-                    ctx.rotate(d.steer * 1.4);
-                    ctx.fillStyle = '#ff3300'; ctx.fillRect(-4, -vw.r + 10, 8, 22);
-                    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = "#ffeb3b";
+                    ctx.font = "italic 900 48px 'Arial Black', Gadget, sans-serif";
+                    ctx.textAlign = 'center';
+                    ctx.fillText(d.lapPopupText, 0, 0);
+                    ctx.lineWidth = 2; ctx.strokeStyle = "black"; ctx.strokeText(d.lapPopupText, 0, 0);
                     ctx.restore();
-                    ctx.globalAlpha = 1;
+                    d.lapPopupTimer--;
+                }
+
+                // --- 2. VELOCÍMETRO RADIAL ---
+                const hudX = w - 80;
+                const hudY = h - 80;
+                
+                // Fundo
+                ctx.beginPath(); ctx.arc(hudX, hudY, 60, 0, Math.PI*2);
+                ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fill();
+                ctx.lineWidth = 4; ctx.strokeStyle = "#fff"; ctx.stroke();
+
+                // Arco de RPM
+                const speedPct = d.speed / CONF.TURBO_MAX_SPEED;
+                ctx.beginPath();
+                ctx.arc(hudX, hudY, 50, Math.PI * 0.8, (Math.PI * 0.8) + (Math.PI * 1.4 * speedPct));
+                ctx.strokeStyle = d.turboLock ? "#00e5ff" : (speedPct > 0.8 ? "#ff1744" : "#76ff03");
+                ctx.lineWidth = 8; ctx.lineCap = "round"; ctx.stroke();
+
+                // Texto KM/H
+                ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+                ctx.font = "bold 32px sans-serif";
+                ctx.fillText(Math.floor(d.speed), hudX, hudY + 10);
+                ctx.font = "12px sans-serif"; ctx.fillText("KM/H", hudX, hudY + 25);
+
+                // --- 3. RANK & VOLTA ---
+                ctx.fillStyle = "rgba(0,0,0,0.6)";
+                ctx.beginPath(); ctx.roundRect(20, h - 70, 160, 50, 10); ctx.fill();
+                
+                // Posição Gigante
+                ctx.fillStyle = d.rank === 1 ? "#ffd700" : "#fff";
+                ctx.font = "italic 900 40px sans-serif";
+                ctx.textAlign = "left";
+                ctx.fillText(`${d.rank}º`, 35, h - 32);
+                
+                // Volta Pequena
+                ctx.fillStyle = "#ccc";
+                ctx.font = "bold 16px sans-serif";
+                ctx.fillText(`/ ${d.rivals.length + 1}`, 90, h - 32);
+                ctx.fillText(`L ${d.lap}/${d.totalLaps}`, 90, h - 50);
+
+                // --- 4. BARRA DE NITRO ---
+                const barW = 300;
+                const barH = 20;
+                const barX = w/2 - barW/2;
+                const barY = 30;
+
+                // Moldura
+                ctx.fillStyle = "rgba(0,0,0,0.8)";
+                ctx.transform(1, 0, -0.2, 1, 0, 0); // Shear effect (Itálico)
+                ctx.fillRect(barX, barY, barW, barH);
+                
+                // Preenchimento
+                const fillW = (d.nitro / 100) * (barW - 4);
+                const nitroColor = d.turboLock ? "#00e5ff" : "#ff9100";
+                
+                // Efeito de brilho piscante se cheio
+                if (d.nitro >= 99 && d.time % 10 < 5) ctx.fillStyle = "#fff";
+                else ctx.fillStyle = nitroColor;
+                
+                ctx.fillRect(barX + 2, barY + 2, fillW, barH - 4);
+                ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset Transform
+
+                // Texto Nitro
+                ctx.fillStyle = "#fff"; ctx.font = "italic bold 16px sans-serif"; ctx.textAlign = "right";
+                ctx.fillText("BOOST", barX - 10, barY + 16);
+
+                // --- 5. MINI-MAPA DINÂMICO (Advanced Rotation) ---
+                if (minimapPoints.length > 0) {
+                    const mapS = 130;
+                    const mapX = 30;
+                    const mapY = 30; // Top Left
+                    
+                    ctx.save();
+                    // Clip redondo
+                    ctx.beginPath(); ctx.arc(mapX + mapS/2, mapY + mapS/2, mapS/2, 0, Math.PI*2); 
+                    ctx.clip();
+                    
+                    // Fundo
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.85)"; ctx.fill();
+
+                    // Transformação para rotação
+                    ctx.translate(mapX + mapS/2, mapY + mapS/2);
+                    
+                    // Calcula ângulo atual do jogador no mapa
+                    // A rotação deve ser oposta à curva atual da pista ou direção acumulada
+                    const currentMapIdx = Math.floor((d.pos / trackLength) * minimapPoints.length) % minimapPoints.length;
+                    const currentPoint = minimapPoints[currentMapIdx];
+                    
+                    // Rotaciona o mundo para que o jogador sempre aponte para "CIMA"
+                    ctx.rotate(-currentPoint.dir - Math.PI/2);
+                    
+                    // Move o mundo para centralizar no jogador
+                    const scale = 3.5; // Zoom
+                    ctx.translate(-currentPoint.x * scale, -currentPoint.y * scale);
+                    
+                    // Desenha Pista
+                    ctx.strokeStyle = "#555";
+                    ctx.lineWidth = 14;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    minimapPoints.forEach((p, i) => {
+                        if (i===0) ctx.moveTo(p.x * scale, p.y * scale);
+                        else ctx.lineTo(p.x * scale, p.y * scale);
+                    });
+                    ctx.stroke();
+
+                    // Core Pista (Branco)
+                    ctx.strokeStyle = "#fff"; ctx.lineWidth = 6; ctx.stroke();
+
+                    // Rivais
+                    d.rivals.forEach(r => {
+                        const rIdx = Math.floor((r.pos / trackLength) * minimapPoints.length) % minimapPoints.length;
+                        const rp = minimapPoints[rIdx];
+                        ctx.fillStyle = r.color;
+                        ctx.beginPath(); ctx.arc(rp.x * scale, rp.y * scale, 8, 0, Math.PI*2); ctx.fill();
+                        // Borda do rival
+                        ctx.strokeStyle="black"; ctx.lineWidth=2; ctx.stroke();
+                    });
+
+                    // Jogador (Seta) - Desenhado nas coordenadas do ponto, mas como giramos o canvas, vai ficar no centro
+                    ctx.translate(currentPoint.x * scale, currentPoint.y * scale);
+                    // Como rotacionamos o canvas, a seta aponta sempre para "Cima" visualmente (que é a direção da pista)
+                    ctx.rotate(currentPoint.dir + Math.PI/2); // Cancela rotação para desenhar ícone fixo? Não, queremos fixo na tela.
+                    // Na verdade, já estamos no 0,0 do contexto rotacionado. O ponto (0,0) é o jogador.
+                    
+                    ctx.fillStyle = "#00e5ff";
+                    ctx.shadowColor="#00e5ff"; ctx.shadowBlur=10;
+                    ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(7, 8); ctx.lineTo(0, 4); ctx.lineTo(-7, 8); ctx.fill();
+                    
+                    ctx.restore();
+
+                    // Borda do Mapa
+                    ctx.beginPath(); ctx.arc(mapX + mapS/2, mapY + mapS/2, mapS/2, 0, Math.PI*2); 
+                    ctx.lineWidth = 4; ctx.strokeStyle = "#fff"; ctx.stroke();
+                }
+
+                // --- 6. VOLANTE VIRTUAL (Se ativo) ---
+                if (d.virtualWheel.opacity > 0) {
+                    ctx.save();
+                    ctx.globalAlpha = d.virtualWheel.opacity;
+                    ctx.translate(d.virtualWheel.x, d.virtualWheel.y);
+                    
+                    // Aro
+                    ctx.beginPath(); ctx.arc(0,0, d.virtualWheel.r, 0, Math.PI*2);
+                    ctx.lineWidth = 6; ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.stroke();
+                    
+                    // Marcador de Direção
+                    ctx.rotate(d.steer * 1.5);
+                    ctx.fillStyle = "#ff3d00";
+                    ctx.beginPath(); ctx.arc(0, -d.virtualWheel.r, 10, 0, Math.PI*2); ctx.fill();
+                    
+                    ctx.restore();
                 }
 
             } else {
-                // Tela Final
-                ctx.fillStyle = "rgba(0,0,0,0.85)";
-                ctx.fillRect(0, 0, w, h);
-                ctx.fillStyle = "#fff";
-                ctx.textAlign = "center";
-                const title = d.rank === 1 ? "VITÓRIA!" : `${d.rank}º LUGAR`;
-                ctx.font = "bold 60px 'Russo One', sans-serif";
-                ctx.fillText(title, w / 2, h * 0.3);
+                // TELA FINAL
+                ctx.fillStyle = "rgba(0,0,0,0.9)";
+                ctx.fillRect(0,0,w,h);
+                
+                ctx.fillStyle = "#fff"; ctx.textAlign="center";
+                ctx.font = "bold 60px sans-serif";
+                ctx.fillText(d.rank === 1 ? "VITÓRIA!" : "FIM DE JOGO", w/2, h*0.4);
+                
+                ctx.font = "30px sans-serif";
+                ctx.fillStyle = "#aaa";
+                ctx.fillText(`POSIÇÃO: ${d.rank}º`, w/2, h*0.55);
+                ctx.fillText(`PONTOS: ${Math.floor(d.score)}`, w/2, h*0.65);
             }
         }
     };
 
-    // =========================================================================
-    // 5. REGISTRO NO SISTEMA (PLUG-AND-PLAY)
-    // =========================================================================
+    // Registro no Sistema
     if(window.System) {
-        // Registra o jogo, substituindo qualquer módulo 'drive' anterior
-        window.System.registerGame('drive', 'Otto Kart GP', '🏎️', Logic, {
-            camOpacity: 0.4, 
-            showWheel: false // Oculta volante padrão do sistema pois temos um customizado
+        window.System.registerGame('drive', 'Otto Kart Commercial', '🏎️', Logic, {
+            camOpacity: 0.1, // Quase transparente para imersão
+            showWheel: false // Usamos nosso próprio render
         });
     }
 
